@@ -1,6 +1,6 @@
 # Imagem oficial da Microsoft com Chromium + libs nativas pré-instaladas.
 # Tag versionada pra evitar surpresa em update remoto.
-FROM mcr.microsoft.com/playwright:v1.49.1-jammy
+FROM mcr.microsoft.com/playwright:v1.60.0-jammy
 
 WORKDIR /app
 
