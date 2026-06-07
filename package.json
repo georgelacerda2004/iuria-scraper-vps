@@ -1,0 +1,22 @@
+{
+  "name": "iuria-scraper-vps",
+  "version": "1.0.0",
+  "description": "Servidor de scraping de jurisprudência dos tribunais brasileiros para o IURIA. Usa Playwright headless (browser real) para passar pelo Cloudflare anti-bot que bloqueia requests HTTP simples. Cache Redis 24h.",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test:stj": "node tests/test-stj.js",
+    "test:tjsp": "node tests/test-tjsp.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "playwright": "^1.49.1",
+    "ioredis": "^5.4.2",
+    "morgan": "^1.10.0",
+    "compression": "^1.7.5"
+  }
+}

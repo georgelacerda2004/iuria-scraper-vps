@@ -1,0 +1,66 @@
+# Stack de produção do iuria-scraper-vps.
+#
+# Serviços:
+#   - app:    Node.js + Playwright (porta interna 3000)
+#   - redis:  cache de buscas (TTL 24h por padrão)
+#   - caddy:  reverse proxy + SSL automático (Let's Encrypt)
+#
+# Como rodar (na VPS):
+#   1. Edite .env com seu IURIA_SCRAPER_TOKEN e DOMAIN
+#   2. docker compose up -d
+#   3. Caddy faz SSL automático no primeiro acesso ao DOMAIN
+#
+# Caddy ouve 80 e 443 e roteia tudo pro app:3000.
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      - PORT=3000
+      - REDIS_URL=redis://redis:6379
+      - IURIA_SCRAPER_TOKEN=${IURIA_SCRAPER_TOKEN}
+      - CACHE_TTL=86400
+    depends_on:
+      - redis
+    expose:
+      - "3000"
+    shm_size: '2gb' # Chromium precisa de shm grande pra páginas pesadas
+    networks:
+      - iuria
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save 60 1
+    volumes:
+      - redis_data:/data
+    networks:
+      - iuria
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - DOMAIN=${DOMAIN}
+    depends_on:
+      - app
+    networks:
+      - iuria
+
+networks:
+  iuria:
+    driver: bridge
+
+volumes:
+  redis_data:
+  caddy_data:
+  caddy_config:

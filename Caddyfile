@@ -1,0 +1,41 @@
+# Caddy 2 — reverse proxy + SSL automático (Let's Encrypt).
+# {$DOMAIN} é lido do .env via docker-compose.
+#
+# Em pre-prod / teste sem DNS: substitua por :80 (HTTP only) ou :443
+# com certificado interno gerado pelo próprio Caddy (self-signed).
+
+{$DOMAIN} {
+	encode gzip zstd
+
+	# Headers de segurança básicos
+	header {
+		# HSTS — força HTTPS depois do 1º acesso
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# Esconde versão do servidor
+		-Server
+		# Proteções padrão
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer-when-downgrade"
+	}
+
+	# Health check direto (Caddy responde sem chamar app — economiza CPU)
+	# Comente se quiser que /health bata no app pra ver estado real
+	# respond /healthz "OK" 200
+
+	# Tudo pro app
+	reverse_proxy app:3000 {
+		# Timeout generoso pra scraping (Playwright pode demorar 10-30s no 1º hit)
+		transport http {
+			read_timeout 60s
+			write_timeout 60s
+			dial_timeout 5s
+		}
+	}
+
+	# Log estruturado em JSON pra facilitar análise
+	log {
+		output stdout
+		format json
+		level INFO
+	}
+}
