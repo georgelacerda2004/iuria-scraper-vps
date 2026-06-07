@@ -16,8 +16,15 @@
 import express from 'express';
 import morgan from 'morgan';
 import compression from 'compression';
-import { chromium } from 'playwright';
+import { chromium } from 'playwright-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import Redis from 'ioredis';
+
+// Ativa stealth: mascara navigator.webdriver, chrome.runtime, plugins, languages,
+// canvas/WebGL fingerprint, etc. CRÍTICO pra passar reCAPTCHA e desafios próprios
+// dos tribunais que detectam Playwright "puro".
+// playwright-extra re-exporta a mesma API do playwright + permite plugins.
+chromium.use(StealthPlugin());
 import { stj } from './scrapers/stj.js';
 import { tjsp } from './scrapers/tjsp.js';
 import { stf } from './scrapers/stf.js';
