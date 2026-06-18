@@ -21,9 +21,33 @@ export async function stj(browser, { busca, limit = 15 }) {
   });
   const page = await context.newPage();
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 40000 });
+    const status0 = resp ? resp.status() : 0;
 
-    // Aguarda Cloudflare challenge resolver (se houver) e listagem carregar
+    // O SCON está atrás do Cloudflare/CSID. Quando há desafio JS, a página inicial
+    // vem com HTTP 403 + interstitial "Verificação automática em andamento".
+    // Damos tempo (até ~25s) pro challenge resolver sozinho (stealth costuma passar
+    // em IP de datacenter "limpo"; em IP residencial/edge geralmente FALHA — esse é
+    // o motivo de existir a VPS na Fase 3).
+    const challenged = await isChallenge(page);
+    if (challenged) {
+      await page.waitForFunction(
+        () => !/Verifica[çc][ãa]o autom[áa]tica|just a moment|cf-browser-verification|__cf_chl/i.test(document.documentElement.outerHTML),
+        { timeout: 25000 },
+      ).catch(() => {});
+    }
+
+    // Se ainda estiver bloqueado, falha EXPLICITAMENTE (não retorna vazio silencioso).
+    if (await isChallenge(page)) {
+      const rayMatch = (await page.content()).match(/RAY\s*\(?ID\)?[:\s]*([0-9a-f]+)/i);
+      throw new Error(
+        `STJ bloqueado por Cloudflare/CSID (status inicial ${status0}` +
+        (rayMatch ? `, RayID ${rayMatch[1]}` : '') +
+        '). Desafio anti-bot não resolveu deste IP — requer VPS (Fase 3).',
+      );
+    }
+
+    // Aguarda listagem carregar
     await page.waitForSelector('.documento, #idTotal, .clsNumDocumento', { timeout: 25000 }).catch(() => {});
 
     // Extrai todos os documentos
@@ -70,6 +94,15 @@ export async function stj(browser, { busca, limit = 15 }) {
   } finally {
     await context.close();
   }
+}
+
+// Detecta o interstitial do Cloudflare/CSID do STJ.
+async function isChallenge(page) {
+  return page.evaluate(() => {
+    const html = document.documentElement.outerHTML;
+    return /Verifica[çc][ãa]o autom[áa]tica em andamento|just a moment|cf-browser-verification|__cf_chl|Coordenadoria de Seguran[çc]a e Defesa Cibern[ée]tica/i.test(html)
+      && !document.querySelector('.documento');
+  }).catch(() => false);
 }
 
 function normalizarDataPtBr(s) {

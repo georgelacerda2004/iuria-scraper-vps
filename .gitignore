@@ -9,3 +9,6 @@ Thumbs.db
 *.pem
 id_rsa*
 id_ed25519*
+
+# Scripts de deploy local do George — contêm IP/senha de root em texto. NUNCA commitar.
+_deploy_*.py

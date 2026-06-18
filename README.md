@@ -33,7 +33,9 @@ Todos exigem header `Authorization: Bearer <IURIA_SCRAPER_TOKEN>`.
 | `GET` | `/tribunais` | Lista tribunais com scraper implementado |
 | `POST` | `/buscar/:tribunal` | Body: `{busca, dataIni?, dataFim?, limit?, noCache?}` |
 
-Tribunais: `stj`, `tjsp` (validados), `stf`, `tst`, `tjpe`, `tjmg`, `tjrj` (skeleton).
+Tribunais: `stj`, `tjsp` (scrapers prontos, fluxo validado localmente — **bloqueados por
+anti-bot fora da VPS**, ver "Validação local Fase 2" abaixo), `stf`, `tst`, `tjpe`,
+`tjmg`, `tjrj` (skeleton).
 
 ### Exemplo
 
@@ -93,6 +95,31 @@ cd /opt/iuria-scraper && git pull && docker compose up -d --build
    - `IURIA_SCRAPER_TOKEN=<token-gerado-pelo-setup>`
 3. Edge function `buscar-jurisprudencia` v11 (próximo deploy) vai usar isso.
 
+## Validação local Fase 2 (STJ + TJSP)
+
+Rodada em 2026-06-18 a partir de IP residencial/local (`npm run test:stj` / `test:tjsp`,
+harness em `tests/_harness.js`, mesmo setup stealth do `server.js`). Resultado:
+
+| Tribunal | Endpoint que o scraper alcança | Bloqueio observado | Ementa real? |
+|---|---|---|---|
+| **STJ** | `scon.stj.jus.br/SCON/pesquisar.jsp` | **HTTP 403 + Cloudflare/CSID** — interstitial "Verificação automática em andamento" com token `__cf_chl_rt_tk` e RayID. O stealth não passou o desafio neste IP (esperado em IP residencial). | Não — bloqueado antes da listagem |
+| **TJSP** | `esaj.tjsp.jus.br/cjsg/resultadoCompleta.do` | **reCAPTCHA gate** — o eSAJ navega corretamente até a página de resultado, mas serve um nó reCAPTCHA visível + zero blocos `.fundocinza1` (detecta a sessão como automação). NÃO há Cloudflare no eSAJ (HTTP 200). | Não — lista de acórdãos gateada por captcha |
+
+**Conclusão:** o código dos dois scrapers está correto — o fluxo (busca → submit → página
+de resultado) foi validado ao vivo e ambos chegam ao endpoint certo. O que falta é
+**IP "limpo" de datacenter (a VPS da Fase 3)**: o STJ aceita o desafio Cloudflare nesse
+tipo de IP, e o eSAJ do TJSP tende a não disparar o reCAPTCHA. Por isso os scrapers hoje
+**falham EXPLICITAMENTE** (lançam erro descrevendo o bloqueio) em vez de retornar vazio
+silencioso — assim o `server.js` reporta a causa real e a edge function pode dar fallback.
+
+Pré-requisitos pra rodar a validação local:
+```bash
+npm install                 # instala playwright-extra + stealth (gitignored)
+npx playwright install chromium
+npm run test:stj            # ou: node tests/test-stj.js "dano moral consumidor"
+npm run test:tjsp           # ou: node tests/test-tjsp.js "auxílio-doença" headful
+```
+
 ## Custo operacional
 
 - VPS DigitalOcean 2GB SP: US$ 12/mês (~R$ 60)
@@ -105,8 +132,8 @@ cd /opt/iuria-scraper && git pull && docker compose up -d --build
 iuria-scraper-vps/
 ├── server.js                 Express + auth + routing + cache
 ├── scrapers/
-│   ├── stj.js                ✅ Validado
-│   ├── tjsp.js               ✅ Validado
+│   ├── stj.js                Fluxo OK; bloqueado por Cloudflare/CSID fora da VPS
+│   ├── tjsp.js               Fluxo OK; reCAPTCHA gate fora da VPS
 │   ├── stf.js                TODO Fase 4
 │   ├── tst.js                TODO Fase 4
 │   ├── tjpe.js               TODO Fase 4
@@ -122,8 +149,9 @@ iuria-scraper-vps/
 
 ## Próximos passos
 
-- [ ] Fase 2: validar scrapers STJ + TJSP localmente
-- [ ] Fase 3: deploy na VPS + plugar no Supabase
+- [x] Fase 2: scrapers STJ + TJSP construídos e fluxo validado localmente
+      (ementa real bloqueada por anti-bot fora da VPS — ver "Validação local Fase 2")
+- [ ] Fase 3: deploy na VPS + plugar no Supabase + re-validar STJ/TJSP com IP limpo
 - [ ] Fase 4: implementar STF + TST + TJPE + TJMG + TJRJ
 - [ ] Futuro: rate limit por user_id (tracking de uso pra plano de cobrança)
 - [ ] Futuro: métricas Prometheus + dashboard Grafana
