@@ -1,0 +1,31 @@
+# Blueprint do Render para o robô WhatsApp Superendividamento.
+# O scraper de jurisprudência (raiz do repo) continua na VPS; aqui só o bot.
+services:
+  - type: web
+    name: superendividamento-bot
+    runtime: node
+    region: virginia
+    plan: starter
+    rootDir: bot
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: PHONE_NUMBER_ID
+        sync: false
+      - key: WABA_ID
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
+      - key: WEBHOOK_VERIFY_TOKEN
+        generateValue: true
+      - key: SUPABASE_URL
+        value: https://mvlhkyqsywqhlrqrdeje.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: OPERADOR_WHATSAPP
+        sync: false

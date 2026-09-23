@@ -1,0 +1,17 @@
+{
+  "name": "superendividamento-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Robô de WhatsApp (Cloud API oficial da Meta) para triagem de leads da Lei do Superendividamento. Estado no Supabase do IURIA.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.4",
+    "express": "^4.21.2"
+  }
+}
