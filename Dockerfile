@@ -11,6 +11,7 @@ RUN npm install --omit=dev --no-audit --no-fund
 # Código da aplicação
 COPY server.js ./
 COPY scrapers/ ./scrapers/
+COPY lib/ ./lib/
 
 # Usuário não-root (imagem do Playwright já cria o 'pwuser')
 USER pwuser

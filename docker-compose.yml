@@ -21,6 +21,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - IURIA_SCRAPER_TOKEN=${IURIA_SCRAPER_TOKEN}
       - CACHE_TTL=86400
+      - JEV_API_KEY=${JEV_API_KEY:-}
     depends_on:
       - redis
     expose:

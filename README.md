@@ -46,6 +46,34 @@ curl -X POST https://scraper.iuria.com.br/buscar/stj \
   -d '{"busca":"dano moral","limit":10}'
 ```
 
+## Ranqueamento por relevância com Jev (piloto)
+
+Opcional. Com `"ranquear": true` no body do `/buscar`, cada acórdão recebe uma
+nota de relevância (0 a 3) em relação à busca, dada pelo
+[Jev da TypeSafe AI](https://docs.typesafe.ai/api), um modelo de decisão
+barato (~US$ 0,042 por milhão de tokens de entrada). Os resultados voltam
+reordenados, com `posicaoOriginal` e `relevancia: {score, confianca}` em cada
+item, mais um bloco `ranqueamento` com status, tokens e custo estimado.
+
+- Ativar: definir `JEV_API_KEY` no `.env` da VPS e `docker compose up -d`.
+- Sem chave ou se o Jev falhar: a busca volta na ordem original, com
+  `ranqueamento.status` = `desabilitado` ou `erro`. A busca nunca quebra.
+- As notas ficam no Redis (chave `<cacheKey>:jev`), então buscas repetidas não
+  pagam o Jev de novo.
+- Código: `lib/jev.js`. Testes (sem chave, API simulada): `npm run test:jev`.
+
+**Avaliar o piloto** (rodar contra a VPS, onde os scrapers passam pelo anti-bot):
+
+```bash
+SCRAPER_URL=https://scraper.iuria.com.br IURIA_SCRAPER_TOKEN=... \
+  npm run piloto:jev -- buscas.txt stj
+```
+
+`buscas.txt` tem uma busca por linha. Sem arquivo, o script usa 10 buscas de
+exemplo. Ele mostra no terminal o top 5 de cada busca (posição nova e antiga, nota)
+e grava `piloto-jev-<data>.json` com um campo `avaliacao` por busca para uma
+pessoa marcar se a ordem do Jev ficou melhor, pior ou igual.
+
 ## Deploy
 
 Pré-requisitos:

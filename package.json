@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node server.js",
     "test:stj": "node tests/test-stj.js",
-    "test:tjsp": "node tests/test-tjsp.js"
+    "test:tjsp": "node tests/test-tjsp.js",
+    "test:jev": "node --test tests/jev.test.js",
+    "piloto:jev": "node tests/piloto-jev.js"
   },
   "engines": {
     "node": ">=20"

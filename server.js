@@ -32,6 +32,7 @@ import { tst } from './scrapers/tst.js';
 import { tjpe } from './scrapers/tjpe.js';
 import { tjmg } from './scrapers/tjmg.js';
 import { tjrj } from './scrapers/tjrj.js';
+import { ranquearPorRelevancia, jevHabilitado } from './lib/jev.js';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const AUTH_TOKEN = process.env.IURIA_SCRAPER_TOKEN || '';
@@ -120,10 +121,13 @@ app.get('/tribunais', requireAuth, (req, res) => {
 });
 
 // Endpoint principal: POST /buscar/:tribunal
-// Body: { busca: string, dataIni?: "YYYY-MM-DD", dataFim?: "YYYY-MM-DD", noCache?: bool, limit?: number }
+// Body: { busca: string, dataIni?: "YYYY-MM-DD", dataFim?: "YYYY-MM-DD", noCache?: bool, limit?: number, ranquear?: bool }
+// ranquear=true: reordena por relevância com o Jev (piloto, ver lib/jev.js).
+// Sem JEV_API_KEY ou se o Jev falhar, volta na ordem original com
+// `ranqueamento.status` explicando — a busca nunca quebra por causa disso.
 app.post('/buscar/:tribunal', requireAuth, async (req, res) => {
   const tribunal = (req.params.tribunal || '').toLowerCase();
-  const { busca, dataIni, dataFim, noCache, limit = 15 } = req.body || {};
+  const { busca, dataIni, dataFim, noCache, limit = 15, ranquear = false } = req.body || {};
 
   if (!busca || typeof busca !== 'string' || busca.trim().length < 2) {
     return res.status(400).json({ error: 'busca obrigatória (mínimo 2 caracteres)' });
@@ -141,7 +145,7 @@ app.post('/buscar/:tribunal', requireAuth, async (req, res) => {
       const cached = await redis.get(key);
       if (cached) {
         const data = JSON.parse(cached);
-        return res.json({ ...data, cache: 'hit', cacheKey: key });
+        return res.json(await comRanqueamento({ ...data, cache: 'hit', cacheKey: key }, ranquear));
       }
     } catch (e) {
       console.warn('[cache] read error:', e.message);
@@ -169,7 +173,7 @@ app.post('/buscar/:tribunal', requireAuth, async (req, res) => {
     } catch (e) {
       console.warn('[cache] write error:', e.message);
     }
-    res.json(payload);
+    res.json(await comRanqueamento(payload, ranquear));
   } catch (err) {
     const tempo_ms = Date.now() - t0;
     console.error(`[${tribunal}] scraper error after ${tempo_ms}ms:`, err.message);
@@ -181,11 +185,42 @@ app.post('/buscar/:tribunal', requireAuth, async (req, res) => {
   }
 });
 
+// Aplica o ranqueamento do Jev sobre um payload de busca, se pedido.
+// Cacheia só as notas (não o payload inteiro) pra não duplicar ementas no Redis.
+async function comRanqueamento(payload, ranquear) {
+  if (!ranquear) return payload;
+  const key = `${payload.cacheKey}:jev`;
+  try {
+    const cached = await redis.get(key);
+    if (cached) {
+      const { ordem, notas, ranqueamento } = JSON.parse(cached);
+      if (ordem.length === payload.resultados.length) {
+        const resultados = ordem.map((i, pos) => ({
+          ...payload.resultados[i], posicaoOriginal: i + 1, relevancia: notas[pos],
+        }));
+        return { ...payload, resultados, ranqueamento: { ...ranqueamento, cache: 'hit' } };
+      }
+    }
+  } catch (e) {
+    console.warn('[cache] jev read error:', e.message);
+  }
+
+  const { resultados, ranqueamento } = await ranquearPorRelevancia(payload.busca, payload.resultados);
+  if (ranqueamento.status === 'ok' && resultados.length) {
+    const ordem = resultados.map((r) => r.posicaoOriginal - 1);
+    const notas = resultados.map((r) => r.relevancia);
+    redis.set(key, JSON.stringify({ ordem, notas, ranqueamento }), 'EX', CACHE_TTL_SECONDS)
+      .catch((e) => console.warn('[cache] jev write error:', e.message));
+  }
+  return { ...payload, resultados, ranqueamento: { ...ranqueamento, cache: 'miss' } };
+}
+
 // ===== Startup =====
 app.listen(PORT, () => {
   console.log(`[iuria-scraper] listening on :${PORT}`);
   console.log(`[iuria-scraper] tribunais: ${Object.keys(SCRAPERS).join(', ')}`);
   console.log(`[iuria-scraper] cache TTL: ${CACHE_TTL_SECONDS}s`);
+  console.log(`[iuria-scraper] jev ranqueamento: ${jevHabilitado() ? 'habilitado' : 'desabilitado (sem JEV_API_KEY)'}`);
 });
 
 // Graceful shutdown
