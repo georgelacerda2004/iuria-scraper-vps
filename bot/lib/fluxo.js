@@ -1,5 +1,6 @@
-// Fluxo da conversa. Nesta versão: recepção, identificação como assistente virtual,
-// consentimento LGPD e handoff. A triagem por IA entra no próximo passo (lib/cerebro.js).
+// Fluxo da conversa: recepção → consentimento → triagem por IA → handoff/encerrado.
+import { responder } from './cerebro.js';
+
 const NOME_ROBO = process.env.NOME_ROBO || 'assistente virtual do escritório';
 
 export const MSG = {
@@ -10,20 +11,22 @@ export const MSG = {
     `Obrigado! Vamos lá. Me conta com suas palavras: quais dívidas você tem hoje (cartão, empréstimo, consignado, cheque especial...) e quanto sai por mês, mais ou menos?`,
   sair: `Tudo bem, encerrei por aqui e não guardei nada. Se quiser retomar, é só mandar uma mensagem.`,
   handoff: `Entendi. Vou passar a sua conversa para a equipe do escritório. Um advogado continua daqui em horário comercial.`,
-  aguardando: `Recebi! Estou preparando a análise da sua situação. Já te respondo.`,
+  midia: `Recebi o arquivo, obrigado! Nesta primeira conversa não preciso de documentos ainda. Me responde por texto, por favor.`,
+  erroIA: `Tive um problema aqui do meu lado. Pode repetir a última mensagem?`,
 };
 
 const RE_SIM = /^\s*(sim|s|ok|concordo|aceito|pode)\b/i;
 const RE_SAIR = /^\s*(sair|parar|cancelar|não|nao)\b/i;
 const RE_HUMANO = /(advogad|atendente|humano|pessoa de verdade|falar com alguém|falar com alguem)/i;
 
-// Recebe a conversa (linha do banco) e o evento; devolve { respostas: string[], patch: {} }.
-export function proximoPasso(conversa, ev) {
+// Recebe a conversa (linha do banco), o evento e o histórico; devolve { respostas: string[], patch: {} }.
+export async function proximoPasso(conversa, ev, { historico = [], ia = responder } = {}) {
   const etapa = conversa.etapa || 'novo';
   const texto = (ev.texto || '').trim();
 
   if (RE_HUMANO.test(texto)) return { respostas: [MSG.handoff], patch: { etapa: 'handoff', handoff_em: new Date().toISOString() } };
   if (etapa === 'handoff') return { respostas: [], patch: {} }; // humano assumiu; robô fica quieto
+  if (etapa === 'encerrado') return { respostas: [MSG.boasVindas(ev.nome)], patch: { etapa: 'consentimento' } };
 
   if (etapa === 'novo') return { respostas: [MSG.boasVindas(ev.nome)], patch: { etapa: 'consentimento' } };
 
@@ -33,6 +36,16 @@ export function proximoPasso(conversa, ev) {
     return { respostas: [MSG.boasVindas(ev.nome)], patch: {} };
   }
 
-  // triagem: por enquanto só acusa recebimento; a IA entra no próximo passo.
-  return { respostas: [MSG.aguardando], patch: {} };
+  // triagem (e etapas seguintes enquanto a equipe não assume): IA conduz.
+  if (ev.mediaId && !texto) return { respostas: [MSG.midia], patch: {} };
+  const entrada = texto || `[enviou ${ev.tipo}]`;
+  let r;
+  try { r = await ia({ historico, textoAtual: entrada }); }
+  catch (e) { console.error('[fluxo] IA falhou:', e.message); return { respostas: [MSG.erroIA], patch: {} }; }
+
+  const patch = {};
+  if (r.calculo) patch.triagem = { ...(conversa.triagem || {}), calculo: r.calculo };
+  if (r.triagem) { patch.triagem = { ...(patch.triagem || conversa.triagem || {}), ...r.triagem }; patch.etapa = r.triagem.resultado === 'favoravel' ? 'viavel' : r.triagem.resultado === 'desfavoravel' ? 'inviavel' : 'triagem'; }
+  if (r.handoff) { patch.etapa = 'handoff'; patch.handoff_em = new Date().toISOString(); patch.handoff_motivo = r.handoff; }
+  return { respostas: [r.texto], patch, usage: r.usage };
 }

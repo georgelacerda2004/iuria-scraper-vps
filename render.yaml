@@ -27,5 +27,11 @@ services:
         value: https://mvlhkyqsywqhlrqrdeje.supabase.co
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: NOME_ROBO
+        value: assistente virtual do escritório
+      - key: NOME_ESCRITORIO
+        value: o escritório
       - key: OPERADOR_WHATSAPP
         sync: false

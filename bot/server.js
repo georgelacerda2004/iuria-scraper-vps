@@ -3,7 +3,7 @@
 import express from 'express';
 import { assinaturaValida, extrairEventos } from './lib/webhook.js';
 import { sendText, markRead } from './lib/whatsapp.js';
-import { upsertConversa, gravarMensagem, atualizarConversa } from './lib/db.js';
+import { upsertConversa, gravarMensagem, atualizarConversa, carregarHistorico } from './lib/db.js';
 import { proximoPasso } from './lib/fluxo.js';
 
 const PORT = parseInt(process.env.PORT || '10000', 10);
@@ -50,7 +50,10 @@ async function tratarMensagem(ev) {
   if (ev.referral) console.log(`[bot] lead de anúncio ${ev.referral.source_id} (${ev.referral.headline ?? ''})`);
 
   markRead(ev.messageId).catch(() => {});
-  const { respostas, patch } = proximoPasso(conversa, ev);
+  // Histórico sem a mensagem atual (ela acabou de ser gravada e entra como textoAtual).
+  const historico = (await carregarHistorico(conversa.id)).filter(m => !(m.direcao === 'in' && m.texto === ev.texto));
+  const { respostas, patch, usage } = await proximoPasso(conversa, ev, { historico });
+  if (usage) console.log(`[ia] ${ev.waId} in=${usage.input} out=${usage.output} cache=${usage.cache_read}`);
   for (const texto of respostas) {
     const r = await sendText(ev.waId, texto);
     await gravarMensagem({ conversaId: conversa.id, waId: ev.waId, direcao: 'out', tipo: 'text', texto, waMessageId: r?.messages?.[0]?.id });

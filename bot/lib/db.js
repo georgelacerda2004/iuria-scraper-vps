@@ -48,3 +48,18 @@ export async function atualizarConversa(conversaId, patch) {
   const { error } = await s.from('se_conversas').update(patch).eq('id', conversaId);
   if (error) throw new Error(`[db] atualizarConversa: ${error.message}`);
 }
+
+// Últimas N mensagens com texto, em ordem cronológica, para montar o contexto da IA.
+export async function carregarHistorico(conversaId, limite = 40) {
+  const s = db();
+  if (!s || !conversaId) return [];
+  const { data, error } = await s
+    .from('se_mensagens')
+    .select('direcao,tipo,texto,criado_em')
+    .eq('conversa_id', conversaId)
+    .not('texto', 'is', null)
+    .order('criado_em', { ascending: false })
+    .limit(limite);
+  if (error) throw new Error(`[db] carregarHistorico: ${error.message}`);
+  return (data ?? []).reverse();
+}
