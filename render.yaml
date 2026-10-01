@@ -33,5 +33,23 @@ services:
         value: assistente virtual do escritório
       - key: NOME_ESCRITORIO
         value: o escritório
+      - key: ESCRITORIO_ID
+        sync: false
+      - key: ADVOGADO_NOME
+        sync: false
+      - key: ADVOGADO_OAB
+        sync: false
+      - key: HONORARIOS_ENTRADA
+        value: "500"
+      - key: ASAAS_API_KEY
+        sync: false
+      - key: ASAAS_BASE_URL
+        value: https://api-sandbox.asaas.com/v3
+      - key: ASAAS_WEBHOOK_TOKEN
+        generateValue: true
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
       - key: OPERADOR_WHATSAPP
         sync: false

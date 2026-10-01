@@ -80,3 +80,77 @@ assert.equal(f.patch.triagem.calculo.percentual_renda_comprometido, 40);
 f = await proximoPasso({ etapa: 'triagem' }, { texto: 'oi' }, { ia: async () => { throw new Error('boom'); } });
 assert.match(f.respostas[0], /problema/);
 console.log('smoke ok');
+
+// --- documentos: os 3 PDFs saem válidos ---
+process.env.ADVOGADO_NOME = 'Advogado Teste'; process.env.ADVOGADO_OAB = 'OAB/SP nº 123.456'; process.env.ESCRITORIO_ID = 'esc-1';
+const { gerarTodos } = await import('../lib/documentos.js');
+const clienteFake = { id: 'cli-1', nome: 'Maria Silva Souza', cpf: '123.456.789-09', rg: '12.345.678-9', endereco: 'Rua A, 10', bairro: 'Centro', cidade: 'São Paulo', uf: 'SP', cep: '01000-000', criado_por: 'u1' };
+const triagemFake = { resumo: 'ok', fonte_renda: 'clt', calculo: { renda_liquida: 3000, parcelas_mensais_consideradas: 1300, percentual_renda_comprometido: 43.3, sobra_mensal: -600, minimo_existencial: 600 }, dividas: [{ credor: 'Banco A', tipo: 'consignado', parcela_mensal: 900, saldo_total: 20000 }] };
+const pdfs = await gerarTodos(clienteFake, triagemFake);
+assert.equal(pdfs.length, 3);
+for (const d of pdfs) { assert.ok(d.pdf.length > 1500, d.tipo + ' pequeno demais'); assert.equal(d.pdf.subarray(0, 4).toString(), '%PDF'); }
+
+// --- captacao: documentos pelo chat ---
+const { receberDocumento, concluirCadastro, verificarConclusao } = await import('../lib/captacao.js');
+const capDeps = {
+  baixar: async () => ({ buffer: Buffer.from('img'), mime: 'image/jpeg' }),
+  guardar: async ({ slot }) => `se-uploads/c1/${slot}.jpg`,
+  classificar: async (path) => path.includes('pessoal') ? { tipo: 'RG', dados: { nome: 'Maria Silva Souza', cpf: '12345678909' } } : path.includes('endereco') ? { tipo: 'Comprovante de residência', dados: { endereco: 'Rua A, 10', cidade: 'São Paulo', uf: 'SP' } } : { tipo: 'Holerite', dados: {} },
+};
+let conv = { id: 'c1', wa_id: '5511999990000', nome_perfil: 'Maria', etapa: 'docs', triagem: triagemFake };
+let d1 = await receberDocumento(conv, { texto: 'oi' }, capDeps);
+assert.match(d1.respostas[0], /Preciso do arquivo/);
+d1 = await receberDocumento(conv, { mediaId: 'm1', tipo: 'image' }, capDeps);
+assert.ok(d1.patch.triagem.documentos.pessoal.path);
+assert.equal(d1.patch.triagem.dados.cpf, '12345678909');
+assert.match(d1.respostas[0], /comprovante de endereço/);
+conv = { ...conv, ...d1.patch };
+const d2 = await receberDocumento(conv, { mediaId: 'm2', tipo: 'image' }, capDeps); conv = { ...conv, ...d2.patch };
+const d3 = await receberDocumento(conv, { mediaId: 'm3', tipo: 'document' }, capDeps); conv = { ...conv, ...d3.patch };
+assert.equal(d3.acao, 'concluir');
+assert.equal(conv.triagem.dados.endereco, 'Rua A, 10');
+
+// --- captacao: cadastro + cobrança + assinatura (tudo simulado) ---
+const enviados = [];
+const cc = await concluirCadastro(conv, {
+  criarCliente: async ({ dados }) => ({ ...clienteFake, nome: dados.nome }),
+  registrarDoc: async () => {},
+  asaasCliente: async () => 'cus_1',
+  asaasCobranca: async ({ referencia, valor }) => { assert.equal(referencia, 'SE|c1'); assert.equal(valor, 500); return { id: 'pay_1', url: 'https://asaas/pay_1' }; },
+  enviar: async ({ tipoDoc }) => { enviados.push(tipoDoc); return { autentiqueId: 'autq_' + tipoDoc, link: 'https://autentique/' + tipoDoc }; },
+});
+assert.equal(cc.patch.etapa, 'pagamento_assinatura');
+assert.deepEqual(enviados, ['se_procuracao', 'se_contrato', 'se_declaracao']);
+assert.match(cc.respostas[0], /https:\/\/asaas\/pay_1/);
+assert.match(cc.respostas[0], /3\. Declaração/);
+conv = { ...conv, ...cc.patch };
+
+// --- captacao: ainda pendente → só marca pago; depois concluído → processo ---
+let avisos = [];
+const vDeps = {
+  consultarPagamento: async () => ({ pago: true }),
+  statusAss: async (ids) => ids.map((id, i) => ({ autentique_id: id, status: i < 2 ? 'assinado' : 'pendente' })),
+  buscarCliente: async () => clienteFake,
+  criarProcesso: async () => 'proc-1', criarEntrevista: async () => 'ent-1', honorario: async () => {}, avisar: async (t) => avisos.push(t),
+};
+let v = await verificarConclusao(conv, vDeps);
+assert.ok(v.patch.pago_em); assert.equal(v.respostas.length, 0); assert.equal(v.patch.etapa, undefined);
+conv = { ...conv, ...v.patch };
+v = await verificarConclusao(conv, { ...vDeps, statusAss: async (ids) => ids.map(id => ({ autentique_id: id, status: 'assinado' })) });
+assert.equal(v.patch.etapa, 'cliente'); assert.equal(v.patch.processo_id, 'proc-1'); assert.equal(avisos.length, 1);
+assert.match(v.respostas[0], /tudo confirmado/i);
+
+// --- fluxo: viavel → docs ---
+f = await proximoPasso({ etapa: 'viavel', nome_perfil: 'Maria Silva' }, { texto: 'ok' });
+assert.equal(f.patch.etapa, 'docs'); assert.match(f.respostas[0], /RG ou CNH/);
+
+// --- servidor: webhook do Asaas exige o token ---
+process.env.ASAAS_WEBHOOK_TOKEN = 'tok';
+const { app } = await import('../server.js');
+const srv = app.listen(0); const port = srv.address().port;
+let rr = await fetch(`http://127.0.0.1:${port}/webhooks/asaas`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+assert.equal(rr.status, 401);
+rr = await fetch(`http://127.0.0.1:${port}/webhooks/asaas`, { method: 'POST', headers: { 'content-type': 'application/json', 'asaas-access-token': 'tok' }, body: JSON.stringify({ event: 'PAYMENT_CONFIRMED', payment: { externalReference: 'SE|c1' } }) });
+assert.equal(rr.status, 200);
+srv.close();
+console.log('smoke ok (captacao)');

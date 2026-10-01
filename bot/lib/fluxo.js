@@ -1,5 +1,6 @@
 // Fluxo da conversa: recepção → consentimento → triagem por IA → handoff/encerrado.
 import { responder } from './cerebro.js';
+import { receberDocumento, concluirCadastro, verificarConclusao, MSG as CAP } from './captacao.js';
 
 const NOME_ROBO = process.env.NOME_ROBO || 'assistente virtual do escritório';
 
@@ -20,7 +21,8 @@ const RE_SAIR = /^\s*(sair|parar|cancelar|não|nao)\b/i;
 const RE_HUMANO = /(advogad|atendente|humano|pessoa de verdade|falar com alguém|falar com alguem)/i;
 
 // Recebe a conversa (linha do banco), o evento e o histórico; devolve { respostas: string[], patch: {} }.
-export async function proximoPasso(conversa, ev, { historico = [], ia = responder } = {}) {
+export async function proximoPasso(conversa, ev, opts = {}) {
+  const { historico = [], ia = responder } = opts;
   const etapa = conversa.etapa || 'novo';
   const texto = (ev.texto || '').trim();
 
@@ -36,7 +38,34 @@ export async function proximoPasso(conversa, ev, { historico = [], ia = responde
     return { respostas: [MSG.boasVindas(ev.nome)], patch: {} };
   }
 
-  // triagem (e etapas seguintes enquanto a equipe não assume): IA conduz.
+  // Pós-triagem (determinístico): documentos → cadastro → pagamento/assinatura → cliente.
+  if (etapa === 'viavel') return { respostas: [CAP.inicioDocs(conversa.nome_perfil || ev.nome)], patch: { etapa: 'docs' } };
+  if (etapa === 'docs') {
+    let r;
+    try { r = await receberDocumento(conversa, ev, opts.captacao); }
+    catch (e) { console.error('[fluxo] documento falhou:', e.message); return { respostas: [MSG.erroIA], patch: {} }; }
+    if (r.acao !== 'concluir') return r;
+    try {
+      const c = await concluirCadastro({ ...conversa, ...(r.patch || {}) }, opts.captacao);
+      return { respostas: [...r.respostas, ...c.respostas], patch: { ...(r.patch || {}), ...c.patch } };
+    } catch (e) {
+      console.error('[fluxo] concluirCadastro falhou:', e.message);
+      return { respostas: [...r.respostas, CAP.erro], patch: { ...(r.patch || {}), etapa: 'handoff', handoff_em: new Date().toISOString(), handoff_motivo: 'erro_cadastro:' + e.message } };
+    }
+  }
+  if (etapa === 'pagamento_assinatura') {
+    let r = null;
+    try { r = await verificarConclusao(conversa, opts.captacao); } catch (e) { console.error('[fluxo] verificarConclusao:', e.message); }
+    if (r && r.respostas.length) return r;
+    const pend = { pago: !!(conversa.pago_em || r?.patch?.pago_em), assinados: 0, total: (conversa.triagem?.assinaturas || []).length };
+    return { respostas: [CAP.aguardando(pend)], patch: r?.patch || {} };
+  }
+  if (etapa === 'cliente') {
+    if (ev.mediaId) return { respostas: ['Recebi, guardei na sua pasta. O advogado já tem acesso.'], patch: {} };
+    return { respostas: ['Seu caso está com o advogado. Ele responde por aqui em horário comercial. Se for urgente, escreva "falar com advogado".'], patch: {} };
+  }
+
+  // triagem: IA conduz.
   if (ev.mediaId && !texto) return { respostas: [MSG.midia], patch: {} };
   const entrada = texto || `[enviou ${ev.tipo}]`;
   let r;

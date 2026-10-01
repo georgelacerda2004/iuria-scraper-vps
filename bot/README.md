@@ -4,8 +4,32 @@ Webhook da WhatsApp Cloud API (Meta) que recebe os leads do anúncio Click-to-Wh
 se identifica como assistente virtual, pede consentimento (LGPD), registra a atribuição
 do anúncio (`referral`) e grava tudo no Supabase do IURIA (tabelas `se_*`).
 
-Estado desta versão: recepção + consentimento + **triagem por IA** (Claude) + handoff.
-O upload de documentos, a cobrança Asaas e a assinatura Autentique entram nos próximos commits.
+Estado desta versão: recepção + consentimento + **triagem por IA** (Claude) + handoff +
+**documentos pelo chat → cadastro no IURIA → cobrança Asaas + 3 PDFs no Autentique →
+(pago e assinado) → processo + entrevista + aviso ao advogado**.
+Falta: gerar a petição (`gerar-inicial`) e enfileirar em `distribuicoes` (semana 2).
+
+## Etapas da conversa (`se_conversas.etapa`)
+`novo → consentimento → triagem → viavel | inviavel → docs → pagamento_assinatura → cliente`
+(`handoff` em qualquer ponto; `encerrado` se recusar o consentimento).
+
+## Pós-triagem (`lib/captacao.js`)
+- **docs**: pede RG/CNH, comprovante de endereço e de renda, um por vez. Cada arquivo vai
+  para o Storage do IURIA (`documentos/se-uploads/...`) e passa pela edge `classificar-doc`
+  (OCR) para preencher nome, CPF, RG e endereço.
+- **cadastro**: `clientes` (dedup por CPF no escritório), `documentos`, cliente no Asaas,
+  cobrança única da entrada (`externalReference = SE|<conversa>`), 3 PDFs gerados em
+  `lib/documentos.js` (procuração, contrato, declaração de superendividamento) e enviados
+  pela edge `autentique-enviar` com link de assinatura.
+- **pagamento_assinatura**: o webhook do Asaas (`POST /webhooks/asaas`) e um verificador a
+  cada 3 min checam pagamento (API Asaas) e assinaturas (tabela `assinaturas`, que o
+  `autentique-webhook` do IURIA já mantém). Quando os dois fecham: `processos`,
+  `inicial_entrevistas`, `honorarios`, aviso no Telegram e mensagem ao cliente.
+
+## Textos jurídicos
+Os modelos em `lib/documentos.js` são um ponto de partida para o advogado revisar
+(contrato com entrada de R$ 500, obrigação de meio, LGPD, foro). Nome, OAB e foro vêm
+do ambiente (`ADVOGADO_NOME`, `ADVOGADO_OAB`, `FORO_CONTRATO`).
 
 ## Como a triagem funciona
 - `lib/cerebro.js`: Claude (`claude-opus-5-5` por padrão) com três ferramentas:

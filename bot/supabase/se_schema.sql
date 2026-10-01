@@ -14,6 +14,11 @@ create table if not exists public.se_conversas (
   triagem jsonb,                              -- renda, dívidas, credores, % comprometido, resultado
   crm_lead_id uuid references public.crm_leads(id),
   cliente_id uuid references public.clientes(id),
+  processo_id uuid references public.processos(id),
+  asaas_payment_id text,
+  pago_em timestamptz,
+  assinado_em timestamptz,
+  handoff_motivo text,
   criado_em timestamptz not null default now(),
   ultima_msg_em timestamptz
 );
