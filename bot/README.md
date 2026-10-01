@@ -7,7 +7,30 @@ do anúncio (`referral`) e grava tudo no Supabase do IURIA (tabelas `se_*`).
 Estado desta versão: recepção + consentimento + **triagem por IA** (Claude) + handoff +
 **documentos pelo chat → cadastro no IURIA → cobrança Asaas + 3 PDFs no Autentique →
 (pago e assinado) → processo + entrevista + aviso ao advogado**.
-Falta: gerar a petição (`gerar-inicial`) e enfileirar em `distribuicoes` (semana 2).
+Depois disso, em segundo plano: **petição de repactuação pela edge `gerar-inicial`** e
+**rascunho em `distribuicoes`** para o George revisar e assinar (`lib/peticao.js`).
+E o **robô de campanha** do Meta (`lib/campanha.js`): cria o rascunho pausado, lê os
+resultados a cada 4 h, cruza com o CRM do robô (leads qualificados e pagos por anúncio),
+recomenda ou pausa (só com `CAMPANHA_AUTOPAUSAR=on`) e manda o relatório diário no Telegram.
+
+## Protocolo: o que o robô faz e o que NÃO faz
+- Faz: entrevista em `inicial_entrevistas` (status `gerada`, com o HTML da petição), linha em
+  `distribuicoes` com status **`rascunho`**, partes estruturadas (autor completo; credores só
+  com o nome), anexos (documentos do cliente + PDFs assinados), justiça gratuita e tutela.
+- Não faz: protocolar, assinar, completar CNPJ dos credores. Isso é do George, no IURIA,
+  com o certificado A3. A observação da distribuição lista o que falta.
+
+## Robô de campanha
+```bash
+npm run campanha rascunho    # cria campanha + conjunto + 3 anúncios informativos, tudo PAUSADO
+npm run campanha relatorio   # lê Meta + CRM e mostra o que pausaria (simulação)
+npm run campanha ciclo       # idem; pausa de verdade se CAMPANHA_AUTOPAUSAR=on
+```
+Regras (reais): julga um anúncio só depois de gastar `CAMPANHA_GASTO_MINIMO` (60); pausa se
+não gerou conversa, se custou mais que `CAMPANHA_TETO_CONVERSA` (25) por conversa sem lead
+qualificado, ou mais que `CAMPANHA_TETO_QUALIFICADO` (120) por lead qualificado. Os textos
+padrão são informativos (Provimento 205/2021): sem valores, sem promessa, sem "clique e reduza".
+Imagens: passar URLs em `criarRascunho({ imagens })`; geração automática fica para a fase 2.
 
 ## Etapas da conversa (`se_conversas.etapa`)
 `novo → consentimento → triagem → viavel | inviavel → docs → pagamento_assinatura → cliente`

@@ -8,6 +8,8 @@ import { proximoPasso } from './lib/fluxo.js';
 import { verificarConclusao } from './lib/captacao.js';
 import { EVENTOS_PAGO } from './lib/asaas.js';
 import { db } from './lib/db.js';
+import { ciclo as cicloCampanha } from './lib/campanha.js';
+import { avisarOperador } from './lib/iuria.js';
 
 const PORT = parseInt(process.env.PORT || '10000', 10);
 const VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || '';
@@ -88,6 +90,19 @@ async function verificarPendencias() {
   }
 }
 if (process.env.NODE_ENV !== 'test') setInterval(() => verificarPendencias().catch(() => {}), 3 * 60_000);
+
+// Robô de campanha: a cada 4 h lê o Meta, cruza com o CRM e (se CAMPANHA_AUTOPAUSAR=on) pausa o que estourou o teto.
+// Relatório vai ao Telegram 1x por dia, às 8h de Brasília.
+let ultimoRelatorioDia = '';
+async function rodarCampanha() {
+  if (!process.env.META_ADS_TOKEN) return;
+  const r = await cicloCampanha();
+  const hojeSP = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  const horaSP = Number(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false }));
+  if (r.feitas.length || (horaSP >= 8 && ultimoRelatorioDia !== hojeSP)) { await avisarOperador(r.relatorio); ultimoRelatorioDia = hojeSP; }
+  else console.log('[campanha]\n' + r.relatorio);
+}
+if (process.env.NODE_ENV !== 'test') { setTimeout(() => rodarCampanha().catch(e => console.error('[campanha]', e.message)), 60_000); setInterval(() => rodarCampanha().catch(e => console.error('[campanha]', e.message)), 4 * 3600_000); }
 
 async function tratarMensagem(ev) {
   const conversa = await upsertConversa({ waId: ev.waId, nome: ev.nome, referral: ev.referral });

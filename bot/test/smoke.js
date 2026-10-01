@@ -132,12 +132,14 @@ const vDeps = {
   statusAss: async (ids) => ids.map((id, i) => ({ autentique_id: id, status: i < 2 ? 'assinado' : 'pendente' })),
   buscarCliente: async () => clienteFake,
   criarProcesso: async () => 'proc-1', criarEntrevista: async () => 'ent-1', honorario: async () => {}, avisar: async (t) => avisos.push(t),
+  preparar: async () => ({ distribuicaoId: 'dist-1', viabilidade: { fundamento_resumo: 'ok' } }),
 };
 let v = await verificarConclusao(conv, vDeps);
 assert.ok(v.patch.pago_em); assert.equal(v.respostas.length, 0); assert.equal(v.patch.etapa, undefined);
 conv = { ...conv, ...v.patch };
 v = await verificarConclusao(conv, { ...vDeps, statusAss: async (ids) => ids.map(id => ({ autentique_id: id, status: 'assinado' })) });
-assert.equal(v.patch.etapa, 'cliente'); assert.equal(v.patch.processo_id, 'proc-1'); assert.equal(avisos.length, 1);
+assert.equal(v.patch.etapa, 'cliente'); assert.equal(v.patch.processo_id, 'proc-1'); assert.ok(avisos.length >= 1);
+await new Promise(r => setTimeout(r, 20)); assert.equal(avisos.length, 2); assert.match(avisos[1], /PETIÇÃO PRONTA/);
 assert.match(v.respostas[0], /tudo confirmado/i);
 
 // --- fluxo: viavel → docs ---
@@ -154,3 +156,35 @@ rr = await fetch(`http://127.0.0.1:${port}/webhooks/asaas`, { method: 'POST', he
 assert.equal(rr.status, 200);
 srv.close();
 console.log('smoke ok (captacao)');
+
+// --- petição: entrevista, distribuição e orquestração com simulações ---
+const { montarEntrevista, montarDistribuicao, prepararProtocolo } = await import('../lib/peticao.js');
+const ent = montarEntrevista({ cliente: clienteFake, triagem: { ...triagemFake, calculo: { ...triagemFake.calculo, saldo_total_considerado: 26000, credores_excluidos: [] } } });
+assert.match(ent, /art\. 104-A/); assert.match(ent, /Banco A/); assert.match(ent, /R\$ 3\.000,00/); assert.ok(ent.length > 50);
+const dist = montarDistribuicao({ cliente: clienteFake, processoId: 'p1', entrevistaId: 'e1', triagem: { ...triagemFake, calculo: { ...triagemFake.calculo, saldo_total_considerado: 26000 } }, escritorioId: 'esc-1', criadoPor: 'u1', anexos: [] });
+assert.equal(dist.status, 'rascunho'); assert.equal(dist.partes.ativo[0].logradouro, 'Rua A'); assert.equal(dist.partes.ativo[0].numero, '10');
+assert.equal(dist.partes.passivo[0].nome, 'Banco A'); assert.equal(dist.valor_causa, 26000); assert.equal(dist.tribunal, 'TJSP');
+let inserido = null, payloadGerar = null;
+const pp = await prepararProtocolo({ conversa: { triagem: { ...triagemFake, documentos: { pessoal: { path: 'se-uploads/c1/pessoal.jpg', mime: 'image/jpeg' } } } }, cliente: clienteFake, processoId: 'p1', entrevistaId: 'e1', escritorioId: 'esc-1', historicoTexto: '', deps: { gerar: async (x) => { payloadGerar = x; return { html: '<html>', viabilidade: { tem_direito: true }, preco: 1.2 }; }, inserir: async (l) => { inserido = l; return 'dist-9'; } } });
+assert.equal(pp.distribuicaoId, 'dist-9'); assert.equal(inserido.anexos.length, 1); assert.equal(payloadGerar.anexos[0].storage_path, 'se-uploads/c1/pessoal.jpg');
+
+// --- campanha: regras de decisão e relatório ---
+const { decidir, relatorio: relCamp } = await import('../lib/campanha.js');
+const R = { orcamentoDiario: 100, gastoMinimoParaJulgar: 60, tetoCustoConversa: 25, tetoCustoLeadQualificado: 120, janelaDias: 7 };
+const ins = [
+  { ad_id: 'a1', ad_name: 'A1', gasto: 80, conversas: 0, impressoes: 1000, cliques: 20 },
+  { ad_id: 'a2', ad_name: 'A2', gasto: 90, conversas: 2, impressoes: 1000, cliques: 20 },
+  { ad_id: 'a3', ad_name: 'A3', gasto: 100, conversas: 8, impressoes: 1000, cliques: 20 },
+  { ad_id: 'a4', ad_name: 'A4', gasto: 30, conversas: 0, impressoes: 100, cliques: 2 },
+  { ad_id: 'a5', ad_name: 'A5', gasto: 300, conversas: 20, impressoes: 1000, cliques: 20 },
+];
+const dec = decidir(ins, { a3: { leads: 8, qualificados: 2, pagos: 1 }, a5: { leads: 20, qualificados: 2, pagos: 0 } }, R);
+const byId = Object.fromEntries(dec.map(d => [d.ad_id, d]));
+assert.equal(byId.a1.acao, 'pausar');      // gastou sem conversa
+assert.equal(byId.a2.acao, 'pausar');      // R$45/conversa e zero qualificado
+assert.equal(byId.a3.acao, 'destacar');    // tem cliente pago
+assert.equal(byId.a4.acao, 'manter');      // ainda não gastou o mínimo
+assert.equal(byId.a5.acao, 'pausar');      // R$150 por qualificado > 120
+const rel = relCamp(dec, R);
+assert.match(rel, /Gasto R\$ 600\.00/); assert.match(rel, /A5: R\$ 300 .* PAUSAR/);
+console.log('smoke ok (peticao + campanha)');

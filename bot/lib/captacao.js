@@ -5,6 +5,7 @@ import { downloadMedia } from './whatsapp.js';
 import * as iuria from './iuria.js';
 import * as asaas from './asaas.js';
 import { gerarTodos } from './documentos.js';
+import { prepararProtocolo } from './peticao.js';
 
 const SLOTS = [
   { slot: 'pessoal', pede: 'Agora preciso de uma foto do seu *RG ou CNH* (frente e verso na mesma foto, ou em duas mensagens). Pode mandar como foto ou PDF.', aceita: /RG|CNH|CPF/i },
@@ -119,8 +120,13 @@ export async function verificarConclusao(conversa, deps = {}) {
   const cli = cliente || (deps.buscarCliente || iuria.buscarCliente)(conversa.cliente_id).then(c => c || { id: conversa.cliente_id, nome: conversa.nome_perfil });
   const c = await cli;
   const processoId = await criarProcesso({ cliente: c, escritorioId: process.env.ESCRITORIO_ID, triagem });
-  await criarEntrevista({ cliente: c, processoId, escritorioId: process.env.ESCRITORIO_ID, triagem, historicoTexto: deps.historicoTexto || '' });
   await honorario({ clienteId: c.id, processoId, valorEntrada: ENTRADA(), criadoPor: c.criado_por || null });
-  await avisar(`NOVO CLIENTE SUPERENDIVIDAMENTO ✅\n${conversa.nome_perfil || conversa.wa_id} (${conversa.wa_id})\nEntrada paga e 3 documentos assinados. Processo criado no IURIA (${processoId}). Entrevista pronta para gerar a inicial.\nResumo: ${triagem.resumo || '-'}`);
+  const entrevistaId = await criarEntrevista({ cliente: c, processoId, escritorioId: process.env.ESCRITORIO_ID, triagem, historicoTexto: deps.historicoTexto || '' }).catch(e => { console.warn('[captacao] entrevista:', e.message); return null; });
+  await avisar(`NOVO CLIENTE SUPERENDIVIDAMENTO ✅\n${conversa.nome_perfil || conversa.wa_id} (${conversa.wa_id})\nEntrada paga e 3 documentos assinados. Processo criado no IURIA (${processoId}). Gerando a petição; aviso quando a distribuição estiver em rascunho para você revisar.\nResumo: ${triagem.resumo || '-'}`);
+  // Petição + rascunho de distribuição em segundo plano (a IA leva minutos). Nunca protocola.
+  const preparar = deps.preparar || prepararProtocolo;
+  preparar({ conversa, cliente: c, processoId, entrevistaId, escritorioId: process.env.ESCRITORIO_ID, historicoTexto: deps.historicoTexto || '' })
+    .then(r => avisar(`PETIÇÃO PRONTA PARA REVISÃO — ${c.nome}\nDistribuição em rascunho (${r.distribuicaoId || 'sem id'}) no IURIA. Falta: exportar o PDF da petição, completar CNPJ dos credores e assinar com o A3.${r.viabilidade?.fundamento_resumo ? '\nViabilidade (IA): ' + r.viabilidade.fundamento_resumo : ''}`))
+    .catch(e => avisar(`FALHA ao gerar a petição de ${c.nome}: ${e.message}. A entrevista está no IURIA para gerar manualmente.`));
   return { respostas: [MSG.concluido(conversa.nome_perfil)], patch: { ...patch, etapa: 'cliente', processo_id: processoId } };
 }
