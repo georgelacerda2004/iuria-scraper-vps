@@ -21,6 +21,11 @@ const raw = Buffer.from(JSON.stringify(payload));
 const sig = 'sha256=' + crypto.createHmac('sha256', 'segredo-teste').update(raw).digest('hex');
 assert.equal(assinaturaValida(raw, sig), true);
 assert.equal(assinaturaValida(raw, 'sha256=' + '0'.repeat(64)), false);
+assert.equal(assinaturaValida(raw, undefined), false, 'sem header deve falhar');
+{ const bak = process.env.META_APP_SECRET; delete process.env.META_APP_SECRET;
+  assert.equal(assinaturaValida(raw, sig), false, 'sem secret deve recusar (fail-closed)');
+  process.env.WEBHOOK_INSECURE = '1'; assert.equal(assinaturaValida(raw, sig), true); delete process.env.WEBHOOK_INSECURE;
+  process.env.META_APP_SECRET = bak; }
 const evs = extrairEventos(payload);
 assert.equal(evs[0].nome, 'Maria Silva');
 assert.equal(evs[0].referral.source_id, '120200000000');

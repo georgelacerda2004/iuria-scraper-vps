@@ -2,9 +2,14 @@
 import crypto from 'node:crypto';
 
 // X-Hub-Signature-256: sha256=<hmac do corpo bruto com o app secret>
+// Fail-closed: sem META_APP_SECRET o webhook recusa tudo. Só WEBHOOK_INSECURE=1 (dev local) libera.
 export function assinaturaValida(rawBody, header) {
   const secret = process.env.META_APP_SECRET;
-  if (!secret) return true; // sem secret configurado, não bloqueia (só em dev)
+  if (!secret) {
+    if (process.env.WEBHOOK_INSECURE === '1') return true;
+    console.error('[webhook] META_APP_SECRET ausente: requisição recusada');
+    return false;
+  }
   if (!header || !header.startsWith('sha256=')) return false;
   const esperado = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
   const recebido = header.slice(7);
