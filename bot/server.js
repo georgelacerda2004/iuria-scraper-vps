@@ -11,6 +11,11 @@ import { db } from './lib/db.js';
 import { ciclo as cicloCampanha } from './lib/campanha.js';
 import { avisarOperador } from './lib/iuria.js';
 
+// Variáveis ainda não preenchidas no Render vêm como "PREENCHER": tratar como ausentes.
+for (const [k, v] of Object.entries(process.env)) if (v === 'PREENCHER') delete process.env[k];
+const faltando = ['WHATSAPP_TOKEN', 'PHONE_NUMBER_ID', 'META_APP_SECRET', 'SUPABASE_SERVICE_ROLE_KEY', 'ANTHROPIC_API_KEY', 'ASAAS_API_KEY'].filter(k => !process.env[k]);
+if (faltando.length) console.warn('[bot] variáveis ainda não preenchidas:', faltando.join(', '));
+
 const PORT = parseInt(process.env.PORT || '10000', 10);
 const VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || '';
 
@@ -22,6 +27,7 @@ app.get('/health', (_req, res) => res.json({ status: 'ok', uptime: process.uptim
 
 // Verificação do webhook (Meta chama 1x ao cadastrar a URL no painel do app).
 app.get('/webhook', (req, res) => {
+  console.log(`[webhook] verificação recebida da Meta (mode=${req.query['hub.mode']})`);
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
@@ -40,9 +46,10 @@ function jaVisto(id) {
 }
 
 app.post('/webhook', (req, res) => {
-  if (!assinaturaValida(req.rawBody, req.get('x-hub-signature-256'))) return res.sendStatus(401);
+  if (!assinaturaValida(req.rawBody, req.get('x-hub-signature-256'))) { console.warn('[webhook] assinatura inválida'); return res.sendStatus(401); }
   res.sendStatus(200); // responde antes de processar: a Meta exige resposta rápida
   const eventos = extrairEventos(req.body);
+  console.log(`[webhook] ${eventos.filter(e => e.kind === 'message').length} mensagem(ns), ${eventos.filter(e => e.kind === 'status').length} status`);
   for (const ev of eventos) {
     if (ev.kind !== 'message' || jaVisto(ev.messageId)) continue;
     tratarMensagem(ev).catch(err => console.error('[bot] erro ao tratar mensagem:', err.message));
@@ -95,7 +102,7 @@ if (process.env.NODE_ENV !== 'test') setInterval(() => verificarPendencias().cat
 // Relatório vai ao Telegram 1x por dia, às 8h de Brasília.
 let ultimoRelatorioDia = '';
 async function rodarCampanha() {
-  if (!process.env.META_ADS_TOKEN) return;
+  if (!process.env.META_ADS_TOKEN || !process.env.META_PAGE_ID) return;
   const r = await cicloCampanha();
   const hojeSP = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   const horaSP = Number(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false }));
