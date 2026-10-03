@@ -94,7 +94,7 @@ export async function criarProcesso({ cliente, escritorioId, triagem }) {
     tipo_processo: 'Judicial', status_processo: 'Ativo', area_atuacao: 'Cível', posicao_parte: 'Autor',
     natureza: 'Superendividamento', tribunal: process.env.TRIBUNAL_PADRAO || 'TJSP', uf: cliente.uf || 'SP', comarca: cliente.cidade || null,
     parte_adversa_texto: (triagem?.calculo ? [] : []).concat(((triagem?.credores) || []).map(c => c.credor)).join(', ') || 'Credores (ver declaração)',
-    responsavel: process.env.ADVOGADO_NOME || null, advogado_nome: process.env.ADVOGADO_NOME || null, advogado_oab: process.env.ADVOGADO_OAB || null,
+    responsavel: process.env.RESPONSAVEL_NOME || process.env.ADVOGADO_NOME || null, advogado_nome: process.env.ADVOGADO_NOME || null, advogado_oab: process.env.ADVOGADO_OAB || null,
     criado_por: dono, ativo: true,
   }).select('id').single();
   if (error) throw new Error(`[iuria] criar processo: ${error.message}`);
