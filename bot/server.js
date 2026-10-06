@@ -15,6 +15,13 @@ import { avisarOperador } from './lib/iuria.js';
 for (const [k, v] of Object.entries(process.env)) if (v === 'PREENCHER') delete process.env[k];
 const faltando = ['WHATSAPP_TOKEN', 'PHONE_NUMBER_ID', 'META_APP_SECRET', 'SUPABASE_SERVICE_ROLE_KEY', 'ANTHROPIC_API_KEY', 'ASAAS_API_KEY'].filter(k => !process.env[k]);
 if (faltando.length) console.warn('[bot] variáveis ainda não preenchidas:', faltando.join(', '));
+// Diagnóstico: só os NOMES das variáveis opcionais ausentes (nunca valores), para conferir o painel do Render pelo log.
+const OPCIONAIS = ['WABA_ID', 'WEBHOOK_VERIFY_TOKEN', 'SUPABASE_URL', 'CLAUDE_MODEL', 'NOME_ROBO', 'NOME_ESCRITORIO', 'ESCRITORIO_ID',
+  'ADVOGADO_NOME', 'ADVOGADO_OAB', 'RESPONSAVEL_NOME', 'ESCRITORIO_ENDERECO', 'FORO_CONTRATO', 'TRIBUNAL_PADRAO', 'HONORARIOS_ENTRADA',
+  'ASAAS_BASE_URL', 'ASAAS_WEBHOOK_TOKEN', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'META_ADS_TOKEN', 'META_AD_ACCOUNT_ID', 'META_PAGE_ID',
+  'SISTEMA_PADRAO', 'CAMPANHA_AUTOPAUSAR', 'OPERADOR_WHATSAPP', 'NODE_VERSION'];
+const ausentes = OPCIONAIS.filter(k => !process.env[k]);
+console.log('[bot] variáveis opcionais ausentes (padrão interno ou recurso desligado):', ausentes.length ? ausentes.join(', ') : 'nenhuma');
 
 const PORT = parseInt(process.env.PORT || '10000', 10);
 const VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN || '';
