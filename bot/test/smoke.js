@@ -193,3 +193,13 @@ assert.equal(byId.a5.acao, 'pausar');      // R$150 por qualificado > 120
 const rel = relCamp(dec, R);
 assert.match(rel, /Gasto R\$ 600\.00/); assert.match(rel, /A5: R\$ 300 .* PAUSAR/);
 console.log('smoke ok (peticao + campanha)');
+
+// Cada criativo padrão precisa ter o cartão de imagem gerado (bot/anuncios/gerar.py).
+{
+  const { CRIATIVOS_PADRAO } = await import('../lib/campanha.js');
+  const { existsSync } = await import('node:fs');
+  for (const c of CRIATIVOS_PADRAO) {
+    if (!c.imagem || !existsSync(new URL('../' + c.imagem, import.meta.url))) throw new Error('imagem do anúncio ausente: ' + c.imagem);
+  }
+  console.log('smoke ok (imagens dos anúncios)');
+}

@@ -1,4 +1,8 @@
 // Robô de campanha (Meta Marketing API, Graph v21): cria o rascunho pausado, lê resultados,
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const AQUI = path.dirname(fileURLToPath(import.meta.url));
 // cruza com o CRM (leads qualificados e pagos por anúncio) e aplica regras. Nunca ativa nada sozinho:
 // ativar é clique do George no Gerenciador (ou comando explícito).
 import { db } from './db.js';
@@ -104,10 +108,19 @@ async function regiaoSaoPaulo() {
 
 // Textos informativos, dentro do Provimento 205/2021: sem valores, sem promessa, sem "clique e reduza".
 export const CRIATIVOS_PADRAO = [
-  { nome: 'Informativo 1 — a lei existe', texto: 'Você sabia que existe uma lei para quem não consegue mais pagar as dívidas sem comprometer o básico da família? É a Lei do Superendividamento (Lei 14.181/2021). Ela permite reunir todos os credores numa única negociação na Justiça. Tire suas dúvidas com nosso assistente.', titulo: 'Lei do Superendividamento: o que ela permite' },
-  { nome: 'Informativo 2 — mínimo existencial', texto: 'A lei garante que uma parte da sua renda fique protegida para despesas básicas, o chamado mínimo existencial. Se as parcelas estão tomando quase tudo, vale entender como funciona. Converse com nosso assistente e saiba se o seu caso se enquadra.', titulo: 'Quando as parcelas tomam quase toda a renda' },
-  { nome: 'Informativo 3 — plano de até 5 anos', texto: 'Pela Lei 14.181/2021, o consumidor de boa-fé pode pedir ao juiz um plano para pagar as dívidas de consumo em até 5 anos, com todos os credores na mesma mesa. Entenda o que entra e o que não entra. Fale com nosso assistente.', titulo: 'Um plano para todas as dívidas, na mesma mesa' },
+  { nome: 'Informativo 1 — a lei existe', imagem: 'anuncios/01-a-lei-existe-feed.png', texto: 'Você sabia que existe uma lei para quem não consegue mais pagar as dívidas sem comprometer o básico da família? É a Lei do Superendividamento (Lei 14.181/2021). Ela permite reunir todos os credores numa única negociação na Justiça. Tire suas dúvidas com nosso assistente.', titulo: 'Lei do Superendividamento: o que ela permite' },
+  { nome: 'Informativo 2 — mínimo existencial', imagem: 'anuncios/02-minimo-existencial-feed.png', texto: 'A lei garante que uma parte da sua renda fique protegida para despesas básicas, o chamado mínimo existencial. Se as parcelas estão tomando quase tudo, vale entender como funciona. Converse com nosso assistente e saiba se o seu caso se enquadra.', titulo: 'Quando as parcelas tomam quase toda a renda' },
+  { nome: 'Informativo 3 — plano de até 5 anos', imagem: 'anuncios/03-plano-5-anos-feed.png', texto: 'Pela Lei 14.181/2021, o consumidor de boa-fé pode pedir ao juiz um plano para pagar as dívidas de consumo em até 5 anos, com todos os credores na mesma mesa. Entenda o que entra e o que não entra. Fale com nosso assistente.', titulo: 'Um plano para todas as dívidas, na mesma mesa' },
 ];
+
+// Sobe a imagem do cartão para a biblioteca da conta e devolve o image_hash.
+async function subirImagem(conta, arquivo) {
+  const bytes = (await readFile(path.join(AQUI, '..', arquivo))).toString('base64');
+  const j = await graph(`act_${conta}/adimages`, { method: 'POST', body: { bytes } });
+  const img = Object.values(j.images || {})[0];
+  if (!img?.hash) throw new Error(`[campanha] upload da imagem falhou: ${arquivo}`);
+  return img.hash;
+}
 
 export async function criarRascunho({ criativos = CRIATIVOS_PADRAO, imagens = [], mensagemBoasVindas } = {}) {
   const { conta, pagina } = cfg();
@@ -124,6 +137,7 @@ export async function criarRascunho({ criativos = CRIATIVOS_PADRAO, imagens = []
     const c = criativos[i];
     const link_data = { message: c.texto, name: c.titulo, link: 'https://api.whatsapp.com/send', call_to_action: { type: 'WHATSAPP_MESSAGE', value: { app_destination: 'WHATSAPP' } } };
     if (imagens[i]) link_data.picture = imagens[i];
+    else if (c.imagem) link_data.image_hash = await subirImagem(conta, c.imagem);
     if (mensagemBoasVindas) link_data.page_welcome_message = mensagemBoasVindas;
     const cr = await graph(`act_${conta}/adcreatives`, { method: 'POST', body: { name: c.nome, object_story_spec: { page_id: pagina, link_data } } });
     const ad = await graph(`act_${conta}/ads`, { method: 'POST', body: { name: c.nome, adset_id: adset.id, creative: { creative_id: cr.id }, status: 'PAUSED' } });
