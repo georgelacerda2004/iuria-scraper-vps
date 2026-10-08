@@ -5,7 +5,7 @@ import { assinaturaValida, extrairEventos } from './lib/webhook.js';
 import { sendText, markRead } from './lib/whatsapp.js';
 import { upsertConversa, gravarMensagem, atualizarConversa, carregarHistorico } from './lib/db.js';
 import { proximoPasso } from './lib/fluxo.js';
-import { verificarConclusao } from './lib/captacao.js';
+import { verificarConclusao, concluirCadastro } from './lib/captacao.js';
 import { EVENTOS_PAGO } from './lib/asaas.js';
 import { db } from './lib/db.js';
 import { ciclo as cicloCampanha } from './lib/campanha.js';
@@ -101,6 +101,33 @@ async function verificarPendencias() {
   const { data } = await s.from('se_conversas').select('*').eq('etapa', 'pagamento_assinatura').limit(50);
   for (const c of data || []) {
     try { await checarConversa(c); } catch (e) { console.error('[pendencias]', c.wa_id, e.message); }
+  }
+  await recuperarCadastros();
+}
+
+// Conversas que caíram em handoff por erro no cadastro (bug ou instabilidade) com os 3 documentos já
+// recebidos: tenta concluir o cadastro de novo. Se der certo, manda os links e segue o fluxo normal.
+const SLOTS_DOCS = ['pessoal', 'endereco', 'renda'];
+async function recuperarCadastros() {
+  const s = db();
+  const { data } = await s.from('se_conversas').select('*').eq('etapa', 'handoff').like('handoff_motivo', 'erro_cadastro:%').limit(20);
+  for (const c of data || []) {
+    const docs = c.triagem?.documentos || {};
+    if (!SLOTS_DOCS.every(k => docs[k]?.path)) continue;
+    const tentativas = Number(c.triagem?.recuperacao_tentativas || 0);
+    if (tentativas >= 3) continue;
+    try {
+      const r = await concluirCadastro(c);
+      for (const texto of r.respostas) {
+        const out = await sendText(c.wa_id, texto);
+        await gravarMensagem({ conversaId: c.id, waId: c.wa_id, direcao: 'out', tipo: 'text', texto, waMessageId: out?.messages?.[0]?.id });
+      }
+      await atualizarConversa(c.id, { ...r.patch, handoff_em: null, handoff_motivo: null });
+      console.log('[recuperacao] cadastro concluído após falha anterior:', c.wa_id);
+    } catch (e) {
+      console.error('[recuperacao] ainda falhou:', c.wa_id, e.message);
+      await atualizarConversa(c.id, { triagem: { ...(c.triagem || {}), recuperacao_tentativas: tentativas + 1 }, handoff_motivo: 'erro_cadastro:' + e.message });
+    }
   }
 }
 if (process.env.NODE_ENV !== 'test') setInterval(() => verificarPendencias().catch(() => {}), 3 * 60_000);

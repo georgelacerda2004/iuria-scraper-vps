@@ -62,7 +62,7 @@ export async function criarOuAcharCliente({ dados, waId, nomePerfil, escritorioI
     nascimento: ymd(dados.data_nascimento), nacionalidade: dados.nacionalidade || 'brasileiro(a)', profissao: dados.profissao || null,
     estado_civil: dados.estado_civil || null, celular: waId, email1: dados.email || null,
     cep: dados.cep || null, uf: dados.uf || null, endereco: dados.endereco || null, bairro: dados.bairro || null, cidade: dados.cidade || null,
-    grupo: 'Superendividamento', observacao: `Cadastro automático pelo robô WhatsApp (${waId}).`, criado_por: dono, aviso_whatsapp: waId,
+    grupo: 'Superendividamento', observacao: `Cadastro automático pelo robô WhatsApp (${waId}).`, criado_por: dono, aviso_whatsapp: 'manual', // coluna aceita só off|manual|auto; o número já vai em `celular`
   };
   const { data, error } = await s.from('clientes').insert(novo).select('*').single();
   if (error) throw new Error(`[iuria] criar cliente: ${error.message}`);

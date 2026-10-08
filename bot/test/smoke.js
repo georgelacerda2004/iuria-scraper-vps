@@ -203,3 +203,12 @@ console.log('smoke ok (peticao + campanha)');
   }
   console.log('smoke ok (imagens dos anúncios)');
 }
+
+// Regressão: o insert em clientes só aceita aviso_whatsapp em off|manual|auto (constraint do IURIA).
+{
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../lib/iuria.js', import.meta.url), 'utf-8');
+  const m = src.match(/aviso_whatsapp:\s*'([a-z]+)'/);
+  if (!m || !['off', 'manual', 'auto'].includes(m[1])) throw new Error('aviso_whatsapp fora de off|manual|auto');
+  console.log('smoke ok (aviso_whatsapp)');
+}
