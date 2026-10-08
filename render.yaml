@@ -54,7 +54,7 @@ services:
       - key: META_ADS_TOKEN
         sync: false
       - key: META_AD_ACCOUNT_ID
-        value: "248232860934925"
+        value: "1644195394050777"
       - key: META_PAGE_ID
         sync: false
       - key: CAMPANHA_AUTOPAUSAR
