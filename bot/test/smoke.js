@@ -74,7 +74,7 @@ assert.equal(r.calculo.percentual_renda_comprometido, 40);
 // --- fluxo ---
 let f = await proximoPasso({ etapa: 'novo' }, evs[0]);
 assert.equal(f.patch.etapa, 'consentimento');
-assert.match(f.respostas[0], /Sou um robô/);
+assert.match(f.respostas[0], /atendimento inicial é automático/);
 f = await proximoPasso({ etapa: 'consentimento' }, { texto: 'sim' });
 assert.equal(f.patch.etapa, 'triagem');
 f = await proximoPasso({ etapa: 'triagem' }, { texto: 'quero falar com advogado' });
