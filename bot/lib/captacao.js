@@ -12,6 +12,7 @@ const SLOTS = [
   { slot: 'endereco', pede: 'Recebi! Agora um *comprovante de endereço* recente (conta de luz, água ou telefone), no seu nome ou de quem mora com você.', aceita: /resid|endere/i },
   { slot: 'renda', pede: 'Perfeito. Por último, um *comprovante de renda*: holerite, extrato do INSS ou extrato bancário dos últimos 3 meses.', aceita: /renda|holerite|extrato|imposto|ctps/i },
 ];
+const NOME_ROBO = () => process.env.NOME_ROBO || 'Paula';
 const ENTRADA = () => Number(process.env.HONORARIOS_ENTRADA || 500);
 const soDigitos = v => String(v || '').replace(/\D/g, '');
 // CPF: 11 dígitos, não repetidos, com os dois dígitos verificadores corretos.
@@ -24,6 +25,8 @@ export function cpfValido(v) {
 
 export const MSG = {
   inicioDocs: (nome) => `${nome ? nome.split(' ')[0] + ', p' : 'P'}elo que você me contou, sua situação tem sinais de se enquadrar na Lei do Superendividamento. Quem confirma isso é o advogado, e para ele analisar preciso de 3 documentos. Vamos um de cada vez.\n\n` + SLOTS[0].pede,
+  primeiroDoc: 'Para o advogado analisar, preciso de 3 documentos por aqui mesmo. Vamos um de cada vez.\n\n' + SLOTS[0].pede,
+  retomada: (nome) => `${nome ? nome.split(' ')[0] + ', a' : 'A'}qui é a ${NOME_ROBO()} de novo. Já deixei o seu caso com o advogado e ele vai analisar com calma. Para isso, preciso de 3 documentos por aqui mesmo. Vamos um de cada vez.\n\n` + SLOTS[0].pede,
   naoEhDoc: (esperado) => `Esse arquivo não parece ser ${esperado}. Pode conferir e mandar de novo? Se preferir, escreva "pular" que a equipe pede depois.`,
   semArquivo: (pede) => `Preciso do arquivo (foto ou PDF) para seguir. ${pede}`,
   processando: 'Recebi os 3 documentos, obrigado! Estou preparando o seu cadastro e os documentos para assinatura. Leva um minutinho.',

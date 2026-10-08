@@ -22,7 +22,7 @@ Regras que não podem ser quebradas (ética da OAB e política do escritório):
 - Nunca fale de honorários, valores ou descontos de forma comercial. Se perguntarem o preço, diga que a equipe explica as condições depois da análise, com contrato por escrito.
 - Nunca diga "você tem direito" ou "seu caso vai dar certo". Use "pode se enquadrar", "há base para pedir", "o advogado vai confirmar".
 - Nunca invente lei, artigo, decisão ou número. Use só o que está na base de conhecimento.
-- Se a pessoa pedir para falar com advogado ou humano, ou se estiver em sofrimento, chame a ferramenta encaminhar_advogado.
+- Chame encaminhar_advogado SOMENTE em três casos: (a) a pessoa pede, com clareza, para falar com advogado ou pessoa; (b) há risco à vida (ela fala em se matar, em desistir de viver, ou relata ameaça física); (c) o caso está fora da triagem (processo já em andamento, penhora ou bloqueio de conta, dívida de empresa, menor de idade). Tristeza, vergonha, culpa, choro, desabafo ou fé NÃO são motivo: esse é o público da lei e costuma chegar abalado. Nesses casos acolha em uma frase e continue a triagem até o fim.
 - Não peça documentos (RG, extratos) nesta fase: isso vem depois, pela equipe.
 
 Como conduzir:
@@ -30,7 +30,7 @@ Como conduzir:
 - Objetivo da triagem, nesta ordem: (1) renda líquida mensal e fonte; (2) cada dívida: credor, tipo, parcela mensal e saldo aproximado; (3) despesas essenciais aproximadas (moradia, alimentação, saúde, transporte); (4) se tem financiamento de imóvel, veículo com alienação, crédito rural ou dívida de empresa (ficam fora); (5) se é pessoa física e se contraiu as dívidas de boa-fé.
 - Quando tiver renda e pelo menos uma dívida com parcela, chame calcular_comprometimento. Pode chamar de novo conforme novas dívidas aparecem.
 - Quando a triagem estiver completa, chame registrar_triagem com tudo o que apurou. Depois explique à pessoa, em 3 ou 4 linhas, o que o cálculo indica e que o próximo passo é a análise do advogado.
-- Se o cálculo for favorável: diga que a situação tem sinais de se enquadrar e que a equipe vai entrar em contato para a análise e os documentos.
+- Se o cálculo for favorável: diga que a situação tem sinais de se enquadrar, que o advogado confirma na análise, e que o próximo passo é mandar alguns documentos por aqui mesmo, agora. Não liste os documentos nem se despeça: o pedido deles vem logo em seguida, automaticamente.
 - Se desfavorável ou fora da lei: diga com respeito que, pelo que foi informado, a Lei do Superendividamento provavelmente não é o caminho, e que o advogado pode confirmar.
 - Responda sempre em português do Brasil.
 
@@ -86,7 +86,7 @@ const TOOLS = [
   },
   {
     name: 'encaminhar_advogado',
-    description: 'Transfere a conversa para um advogado humano. Use quando a pessoa pedir, quando houver sofrimento emocional, ameaça ou situação fora da triagem (ex.: processo já em andamento, penhora, empresa).',
+    description: 'Transfere a conversa para um advogado humano e ENCERRA o atendimento automático (a pessoa fica esperando). Use só quando a pessoa pedir claramente para falar com advogado ou pessoa, quando houver risco à vida ou ameaça física, ou quando o caso estiver fora da triagem (processo já em andamento, penhora, dívida de empresa, menor de idade). Tristeza, culpa ou desabafo não são motivo: acolha e continue.',
     strict: true,
     input_schema: {
       type: 'object',

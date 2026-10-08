@@ -104,6 +104,24 @@ async function verificarPendencias() {
     try { await checarConversa(c); } catch (e) { console.error('[pendencias]', c.wa_id, e.message); }
   }
   await recuperarCadastros();
+  await retomarConversas();
+}
+
+// Conversas marcadas para retomada pelo operador (etapa = 'retomar', ex.: handoff que não precisava):
+// o robô se reapresenta, pede o primeiro documento e volta ao fluxo normal.
+async function retomarConversas() {
+  const s = db();
+  if (!s) return;
+  const { data } = await s.from('se_conversas').select('*').eq('etapa', 'retomar').limit(20);
+  for (const c of data || []) {
+    try {
+      const texto = CAP.retomada(c.nome_perfil);
+      const out = await sendText(c.wa_id, texto);
+      await gravarMensagem({ conversaId: c.id, waId: c.wa_id, direcao: 'out', tipo: 'text', texto, waMessageId: out?.messages?.[0]?.id });
+      await atualizarConversa(c.id, { etapa: 'docs', handoff_em: null, handoff_motivo: null });
+      console.log('[retomar]', c.wa_id, 'voltou para docs');
+    } catch (e) { console.error('[retomar]', c.wa_id, e.message); }
+  }
 }
 
 // Conversas que caíram em handoff por erro no cadastro (bug ou instabilidade) com os 3 documentos já

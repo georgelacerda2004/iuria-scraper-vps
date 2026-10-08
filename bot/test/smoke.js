@@ -80,8 +80,15 @@ assert.equal(f.patch.etapa, 'triagem');
 f = await proximoPasso({ etapa: 'triagem' }, { texto: 'quero falar com advogado' });
 assert.equal(f.patch.etapa, 'handoff');
 f = await proximoPasso({ etapa: 'triagem' }, { texto: 'ganho 3 mil' }, { ia: async () => ({ texto: 'ok', triagem: { resultado: 'favoravel', resumo: 'x' }, calculo: { percentual_renda_comprometido: 40 } }) });
-assert.equal(f.patch.etapa, 'viavel');
+assert.equal(f.patch.etapa, 'docs'); // favorável: já pede o RG no mesmo turno
+assert.equal(f.respostas.length, 2);
+assert.match(f.respostas[1], /RG ou CNH/);
 assert.equal(f.patch.triagem.calculo.percentual_renda_comprometido, 40);
+f = await proximoPasso({ etapa: 'triagem' }, { texto: 'x' }, { ia: async () => ({ texto: 'ok', triagem: { resultado: 'favoravel', resumo: 'x' }, handoff: 'pediu advogado' }) });
+assert.equal(f.patch.etapa, 'handoff'); // pedido explícito vence
+assert.equal(f.respostas.length, 1);
+const CAPm = (await import('../lib/captacao.js')).MSG;
+assert.match(CAPm.retomada('Jane Silva'), /^Jane, aqui é a Paula de novo/);
 f = await proximoPasso({ etapa: 'triagem' }, { texto: 'oi' }, { ia: async () => { throw new Error('boom'); } });
 assert.match(f.respostas[0], /problema/);
 console.log('smoke ok');

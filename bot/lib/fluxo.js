@@ -75,7 +75,10 @@ export async function proximoPasso(conversa, ev, opts = {}) {
 
   const patch = {};
   if (r.calculo) patch.triagem = { ...(conversa.triagem || {}), calculo: r.calculo };
+  const respostas = [r.texto];
   if (r.triagem) { patch.triagem = { ...(patch.triagem || conversa.triagem || {}), ...r.triagem }; patch.etapa = r.triagem.resultado === 'favoravel' ? 'viavel' : r.triagem.resultado === 'desfavoravel' ? 'inviavel' : 'triagem'; }
   if (r.handoff) { patch.etapa = 'handoff'; patch.handoff_em = new Date().toISOString(); patch.handoff_motivo = r.handoff; }
-  return { respostas: [r.texto], patch, usage: r.usage };
+  // Favorável: já pede o primeiro documento no mesmo turno, sem esperar a pessoa escrever de novo.
+  if (patch.etapa === 'viavel') { respostas.push(CAP.primeiroDoc); patch.etapa = 'docs'; }
+  return { respostas, patch, usage: r.usage };
 }
