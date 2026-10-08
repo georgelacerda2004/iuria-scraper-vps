@@ -36,8 +36,11 @@ export function regras() {
 // --- leitura ---
 export async function insightsPorAnuncio({ dias = 7 } = {}) {
   const { conta } = cfg();
-  const date_preset = dias <= 1 ? 'today' : `last_${dias}d`;
-  const j = await graph(`act_${conta}/insights`, { params: { level: 'ad', fields: 'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,actions', date_preset, limit: 200 } });
+  // Os presets "last_Nd" do Meta excluem o dia de hoje; usamos um intervalo explícito (fuso da conta, Brasília) que inclui hoje.
+  const dia = (offset) => new Date(Date.now() - offset * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const time_range = { since: dia(Math.max(0, dias - 1)), until: dia(0) };
+  const date_preset = `${time_range.since}..${time_range.until}`;
+  const j = await graph(`act_${conta}/insights`, { params: { level: 'ad', fields: 'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,actions', time_range, limit: 200 } });
   if (!(j.data || []).length) {
     // Diagnóstico (sem segredos): a conta responde mas sem linhas; quantos anúncios o token enxerga?
     const ads = await graph(`act_${conta}/ads`, { params: { fields: 'id,effective_status', limit: 50 } }).catch(e => ({ erro: e.message }));
