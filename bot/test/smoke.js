@@ -226,3 +226,12 @@ console.log('smoke ok (peticao + campanha)');
   if (r.acao !== 'concluir') throw new Error('com CPF válido deveria concluir direto');
   console.log('smoke ok (cpf por texto)');
 }
+
+// Briefing de handoff: número formatado, link, triagem e últimas mensagens.
+{
+  const { montarBriefing, formatarTelefone } = await import('../lib/briefing.js');
+  if (formatarTelefone('5514996426132') !== '+55 14 99642-6132' || formatarTelefone('551133334444') !== '+55 11 3333-4444') throw new Error('telefone mal formatado');
+  const b = montarBriefing({ conversa: { wa_id: '5514996426132', nome_perfil: 'Jane', ad_id: '1', criado_em: '2026-10-08T20:14:00Z', handoff_em: '2026-10-08T20:43:00Z', triagem: { calculo: { renda_liquida: 760, parcelas_mensais_consideradas: 600, percentual_renda_comprometido: 78.9, sobra_mensal: 160, minimo_existencial: 600, credores_considerados: 4, saldo_total_considerado: 6000, indicativo: 'favoravel' }, resumo: 'Pensionista.' } }, mensagens: [{ direcao: 'in', texto: 'Oi', criado_em: '2026-10-08T20:14:00Z' }, { direcao: 'out', texto: 'Olá', criado_em: '2026-10-08T20:14:10Z' }], motivo: 'pediu humano' });
+  for (const trecho of ['+55 14 99642-6132', 'wa.me/5514996426132', 'R$ 760,00', '78.9%', 'Pensionista.', 'Jane: Oi', 'pediu humano']) if (!b.includes(trecho)) throw new Error('briefing sem: ' + trecho);
+  console.log('smoke ok (briefing)');
+}

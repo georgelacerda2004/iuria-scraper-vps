@@ -10,6 +10,7 @@ import { EVENTOS_PAGO } from './lib/asaas.js';
 import { db } from './lib/db.js';
 import { ciclo as cicloCampanha } from './lib/campanha.js';
 import { avisarOperador } from './lib/iuria.js';
+import { montarBriefing } from './lib/briefing.js';
 
 // Variáveis ainda não preenchidas no Render vêm como "PREENCHER": tratar como ausentes.
 for (const [k, v] of Object.entries(process.env)) if (v === 'PREENCHER') delete process.env[k];
@@ -169,6 +170,19 @@ async function tratarMensagem(ev) {
     await gravarMensagem({ conversaId: conversa.id, waId: ev.waId, direcao: 'out', tipo: 'text', texto, waMessageId: r?.messages?.[0]?.id });
   }
   if (Object.keys(patch).length) await atualizarConversa(conversa.id, patch);
+  if (patch.etapa === 'handoff') await avisarHandoff({ ...conversa, ...patch });
+}
+
+// Aviso ao advogado com número e briefing quando a conversa passa para humano (Telegram e,
+// se OPERADOR_WHATSAPP estiver definido, também pelo WhatsApp do robô).
+async function avisarHandoff(conversa) {
+  try {
+    const mensagens = await carregarHistorico(conversa.id);
+    const texto = montarBriefing({ conversa, mensagens, motivo: conversa.handoff_motivo });
+    await avisarOperador(texto);
+    const op = process.env.OPERADOR_WHATSAPP;
+    if (op) await sendText(op, texto).catch(e => console.warn('[handoff] aviso por WhatsApp falhou:', e.message));
+  } catch (e) { console.error('[handoff] aviso falhou:', e.message); }
 }
 
 if (process.env.NODE_ENV !== 'test') {
