@@ -1,0 +1,467 @@
+<title>Funil Superendividamento</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --paper:#FBFBF8; --surface:#FFFFFF; --ink:#1B1F2A; --muted:#5C6273; --line:#D9DBE3; --line-soft:#ECEDF2;
+  --accent:#1F3A93; --accent-soft:#E8EDFB;
+  --ok:#1E7F5C; --ok-soft:#E3F3EC;
+  --warn:#B7791F; --warn-soft:#FBF1DF;
+  --crit:#B42318; --crit-soft:#FBE7E4;
+  --shadow:0 1px 2px rgba(27,31,42,.06),0 8px 24px rgba(27,31,42,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#12151C; --surface:#1A1E27; --ink:#E8EAF0; --muted:#A3A9B8; --line:#2E3342; --line-soft:#242938;
+    --accent:#8FA8FF; --accent-soft:#1E2742;
+    --ok:#5CCB9B; --ok-soft:#173226;
+    --warn:#E3B25C; --warn-soft:#3A2E17;
+    --crit:#F08C82; --crit-soft:#3C1E1B;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#12151C; --surface:#1A1E27; --ink:#E8EAF0; --muted:#A3A9B8; --line:#2E3342; --line-soft:#242938;
+  --accent:#8FA8FF; --accent-soft:#1E2742;
+  --ok:#5CCB9B; --ok-soft:#173226;
+  --warn:#E3B25C; --warn-soft:#3A2E17;
+  --crit:#F08C82; --crit-soft:#3C1E1B;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:16px;line-height:1.55;padding-inline:16px;padding-block:0 64px}
+.wrap{max-width:920px;margin:0 auto}
+h1,h2,h3{font-family:"Archivo","IBM Plex Sans",system-ui,sans-serif;text-wrap:balance;line-height:1.15;margin:0}
+h1{font-size:clamp(30px,5vw,44px);font-weight:700;letter-spacing:-.01em}
+h2{font-size:clamp(21px,3vw,26px);font-weight:700;margin-top:8px}
+h3{font-size:17px;font-weight:700}
+p{margin:0 0 12px;max-width:68ch}
+a{color:var(--accent)}
+.eyebrow,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+header{padding-block:40px 24px;border-bottom:1px solid var(--line)}
+header .meta{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:14px;color:var(--muted);font-size:14px}
+.lede{font-size:18px;color:var(--muted);margin-top:12px;max-width:62ch}
+section{padding-block:36px 8px;border-bottom:1px solid var(--line-soft)}
+section:last-of-type{border-bottom:0}
+.sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:16px}
+.sec-head .num{font-family:"IBM Plex Mono",monospace;color:var(--accent);font-size:14px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;padding:3px 9px;border-radius:999px;border:1px solid transparent;white-space:nowrap;vertical-align:middle}
+.chip.ok{background:var(--ok-soft);color:var(--ok);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
+.chip.new{background:var(--accent-soft);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.chip.you{background:var(--warn-soft);color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+.chip.risk{background:var(--crit-soft);color:var(--crit);border-color:color-mix(in srgb,var(--crit) 35%,transparent)}
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0 0}
+figure{margin:0}
+figure .frame{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;box-shadow:var(--shadow)}
+figure svg{display:block;width:100%;min-width:640px;height:auto}
+figcaption{font-size:14px;color:var(--muted);margin-top:10px;max-width:70ch}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:8px}
+.summary .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+.summary .card .eyebrow{margin-bottom:6px}
+.summary .card p{margin:0;font-size:15px}
+table{width:100%;border-collapse:collapse;font-size:14.5px;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.tbl{overflow-x:auto;margin-top:8px}
+th,td{padding:10px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line-soft)}
+th{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:color-mix(in srgb,var(--surface) 80%,var(--paper))}
+tr:last-child td{border-bottom:0}
+td code,p code,li code{font-family:"IBM Plex Mono",monospace;font-size:13px;background:var(--line-soft);padding:1px 5px;border-radius:4px}
+.num-cell{font-variant-numeric:tabular-nums;white-space:nowrap}
+.stage{display:grid;grid-template-columns:56px 1fr;gap:0 18px;padding:22px 0;border-top:1px solid var(--line-soft)}
+.stage:first-of-type{border-top:0}
+.stage .n{font-family:"Archivo",sans-serif;font-weight:700;font-size:28px;color:var(--accent);line-height:1;padding-top:2px}
+.stage .n small{display:block;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);letter-spacing:.06em;margin-top:6px;font-weight:400}
+.stage h3{margin-bottom:6px}
+.stage .tags{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px 22px;margin-top:8px}
+.cols h4{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 6px;font-weight:500}
+ul{margin:0 0 10px;padding-left:20px}
+li{margin-bottom:5px}
+li::marker{color:var(--muted)}
+.callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+.callout.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+.callout.crit{border-left-color:var(--crit);background:var(--crit-soft)}
+.callout.ok{border-left-color:var(--ok);background:var(--ok-soft)}
+.callout p:last-child{margin-bottom:0}
+.risk{display:grid;grid-template-columns:auto 1fr;gap:10px 14px;padding:14px 0;border-top:1px solid var(--line-soft)}
+.risk:first-of-type{border-top:0}
+.risk .sev{padding-top:3px}
+.risk h3{font-size:16px;margin-bottom:4px}
+.risk p{font-size:15px;margin-bottom:6px}
+.plan{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:14px}
+.day{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+.day h3{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px}
+.day h3 span{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);font-weight:400}
+.day ul{padding-left:18px;font-size:14.5px}
+.check{list-style:none;padding:0}
+.check li{display:grid;grid-template-columns:22px 1fr;gap:10px;align-items:start;padding:8px 0;border-bottom:1px solid var(--line-soft)}
+.check li:last-child{border-bottom:0}
+.check .box{width:18px;height:18px;border:1.5px solid var(--warn);border-radius:4px;margin-top:3px}
+.check .box.done{border-color:var(--ok);background:var(--ok);position:relative}
+.check .box.done::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;border:solid var(--paper);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.small{font-size:14px;color:var(--muted)}
+footer{padding-top:28px;color:var(--muted);font-size:13px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:no-preference){ .chip{transition:background .15s} }
+@media (max-width:520px){ .stage{grid-template-columns:1fr} .stage .n{display:flex;align-items:baseline;gap:10px;margin-bottom:6px} .stage .n small{margin:0} }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Escopo inicial · versão 1 · 19 set 2026</div>
+  <h1>Funil Superendividamento</h1>
+  <p class="lede">Anúncio → Robô no WhatsApp → Iuria → Protocolo → Tribunal. O mesmo desenho da folha, agora com o que já existe, o que é novo, o que só o George pode destravar e o que dá para subir até amanhã.</p>
+  <div class="meta">
+    <span>Começa por São Paulo (TJSP), depois Brasil</span>
+    <span>Orçamento de mídia: R$ 100/dia</span>
+    <span>Entrada de honorários: R$ 500 via Asaas</span>
+  </div>
+  <div class="legend">
+    <span class="chip ok">Já existe no Iuria</span>
+    <span class="chip new">Novo (eu construo)</span>
+    <span class="chip you">Depende do George</span>
+    <span class="chip risk">Atenção</span>
+  </div>
+</header>
+
+<section>
+  <div class="sec-head"><span class="num">00</span><h2>O desenho, com os nomes reais de cada caixa</h2></div>
+  <figure>
+    <div class="frame">
+    <svg viewBox="0 0 960 540" role="img" aria-label="Fluxo: anúncio leva ao robô de WhatsApp; o robô qualifica, cobra e manda para o Iuria; o Iuria gera procuração, contrato e petição; o protocolo é aprovado pelo George e distribuído no tribunal.">
+      <defs>
+        <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g fill="none" stroke="currentColor" stroke-width="1.5" font-family="IBM Plex Sans, system-ui, sans-serif" font-size="12" color="var(--ink)">
+
+        <!-- ANÚNCIO -->
+        <rect x="40" y="250" width="190" height="96" rx="6" fill="var(--surface)" style="stroke:var(--accent);stroke-width:2"/>
+        <text x="135" y="278" text-anchor="middle" font-family="Archivo, sans-serif" font-size="15" font-weight="700" fill="currentColor" stroke="none">ANÚNCIO</text>
+        <text x="135" y="298" text-anchor="middle" fill="var(--muted)" stroke="none">Meta: Facebook + Instagram</text>
+        <text x="135" y="314" text-anchor="middle" fill="var(--muted)" stroke="none">TikTok e Google na fase 2</text>
+        <text x="135" y="332" text-anchor="middle" fill="var(--accent)" stroke="none" font-family="IBM Plex Mono, monospace" font-size="11">NOVO · robô de campanha</text>
+
+        <!-- ROBÔ WHATSAPP -->
+        <rect x="380" y="40" width="220" height="104" rx="6" fill="var(--surface)" style="stroke:var(--accent);stroke-width:2"/>
+        <text x="490" y="68" text-anchor="middle" font-family="Archivo, sans-serif" font-size="15" font-weight="700" fill="currentColor" stroke="none">ROBÔ WHATSAPP</text>
+        <text x="490" y="88" text-anchor="middle" fill="var(--muted)" stroke="none">Cloud API oficial da Meta</text>
+        <text x="490" y="104" text-anchor="middle" fill="var(--muted)" stroke="none">roda no Render, 24 h</text>
+        <text x="490" y="122" text-anchor="middle" fill="var(--muted)" stroke="none">triagem · dúvidas · documentos · cobrança</text>
+        <text x="490" y="138" text-anchor="middle" fill="var(--accent)" stroke="none" font-family="IBM Plex Mono, monospace" font-size="11">NOVO · número dedicado</text>
+
+        <!-- IURIA -->
+        <rect x="730" y="230" width="190" height="104" rx="6" fill="var(--surface)" style="stroke:var(--ok);stroke-width:2"/>
+        <text x="825" y="258" text-anchor="middle" font-family="Archivo, sans-serif" font-size="15" font-weight="700" fill="currentColor" stroke="none">IURIA</text>
+        <text x="825" y="278" text-anchor="middle" fill="var(--muted)" stroke="none">cadastro do cliente</text>
+        <text x="825" y="294" text-anchor="middle" fill="var(--muted)" stroke="none">procuração + contrato</text>
+        <text x="825" y="310" text-anchor="middle" fill="var(--muted)" stroke="none">assinatura Autentique</text>
+        <text x="825" y="328" text-anchor="middle" fill="var(--ok)" stroke="none" font-family="IBM Plex Mono, monospace" font-size="11">JÁ EXISTE · fluxo JurosZero</text>
+
+        <!-- PROTOCOLO -->
+        <rect x="600" y="420" width="200" height="96" rx="6" fill="var(--surface)" style="stroke:var(--warn);stroke-width:2;stroke-dasharray:6 4"/>
+        <text x="700" y="448" text-anchor="middle" font-family="Archivo, sans-serif" font-size="15" font-weight="700" fill="currentColor" stroke="none">PROTOCOLO</text>
+        <text x="700" y="468" text-anchor="middle" fill="var(--muted)" stroke="none">petição gerada pela IA</text>
+        <text x="700" y="484" text-anchor="middle" fill="var(--muted)" stroke="none">George revisa e aprova</text>
+        <text x="700" y="502" text-anchor="middle" fill="var(--warn)" stroke="none" font-family="IBM Plex Mono, monospace" font-size="11">GEORGE · certificado A1</text>
+
+        <!-- TRIBUNAL -->
+        <rect x="230" y="420" width="190" height="96" rx="6" fill="var(--surface)" style="stroke:var(--ok);stroke-width:2"/>
+        <text x="325" y="448" text-anchor="middle" font-family="Archivo, sans-serif" font-size="15" font-weight="700" fill="currentColor" stroke="none">TRIBUNAL</text>
+        <text x="325" y="468" text-anchor="middle" fill="var(--muted)" stroke="none">TJSP · e-SAJ</text>
+        <text x="325" y="484" text-anchor="middle" fill="var(--muted)" stroke="none">distribuição pelo autopet</text>
+        <text x="325" y="502" text-anchor="middle" fill="var(--ok)" stroke="none" font-family="IBM Plex Mono, monospace" font-size="11">JÁ EXISTE · fila distribuicoes</text>
+
+        <!-- Arrows -->
+        <path d="M232,268 C300,200 330,150 378,110" marker-end="url(#arw)"/>
+        <text x="265" y="176" fill="currentColor" stroke="none" font-family="IBM Plex Mono, monospace" font-size="11">clicou (Click-to-WhatsApp)</text>
+
+        <path d="M602,110 C680,150 700,200 728,250" marker-end="url(#arw)"/>
+        <text x="618" y="150" fill="currentColor" stroke="none" font-family="IBM Plex Mono, monospace" font-size="11">triagem OK + docs</text>
+        <text x="618" y="166" fill="currentColor" stroke="none" font-family="IBM Plex Mono, monospace" font-size="11">+ pagou R$ 500 (Asaas)</text>
+
+        <path d="M800,336 C780,370 750,395 720,418" marker-end="url(#arw)"/>
+        <text x="952" y="376" text-anchor="end" fill="currentColor" stroke="none" font-family="IBM Plex Mono, monospace" font-size="11">assinou → petição pronta</text>
+
+        <path d="M598,470 L424,470" marker-end="url(#arw)"/>
+        <text x="511" y="462" text-anchor="middle" fill="currentColor" stroke="none" font-family="IBM Plex Mono, monospace" font-size="11">distribui</text>
+
+        <!-- Loop: tribunal andamentos → whatsapp -->
+        <path d="M325,418 C325,330 380,220 430,146" stroke-dasharray="4 4" marker-end="url(#arw)"/>
+        <text x="240" y="330" fill="var(--muted)" stroke="none" font-family="IBM Plex Mono, monospace" font-size="11">andamentos → aviso ao cliente</text>
+
+        <!-- Robô de campanha satellite -->
+        <rect x="40" y="380" width="190" height="60" rx="6" fill="var(--surface)" style="stroke:var(--accent);stroke-width:1.5;stroke-dasharray:6 4"/>
+        <text x="135" y="404" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13" font-weight="700" fill="currentColor" stroke="none">ROBÔ DE CAMPANHA</text>
+        <text x="135" y="424" text-anchor="middle" fill="var(--muted)" stroke="none">cron 6×/dia · lê custo por lead</text>
+        <path d="M135,378 L135,350" marker-end="url(#arw)"/>
+      </g>
+    </svg>
+    </div>
+    <figcaption>O robô de campanha e o robô de WhatsApp são as duas peças novas. O Iuria já tem o miolo (upload de documentos, procuração, contrato, Autentique, Asaas, petição inicial por IA e fila de distribuição no e-SAJ). A linha tracejada de volta é o cliente recebendo os andamentos do processo pelo mesmo WhatsApp.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">01</span><h2>Resumo em 30 segundos</h2></div>
+  <div class="summary">
+    <div class="card"><div class="eyebrow">O que descobri</div><p>Do desenho, 3 das 5 caixas já existem no Iuria. O fluxo <strong>JurosZero</strong> (link por token → RG/CPF, comprovante de endereço e renda → procuração → Autentique → contrato) é exatamente a etapa "cadastra no Iuria e manda assinar". Falta só trocar o tipo de ação.</p></div>
+    <div class="card"><div class="eyebrow">Decisão principal</div><p><strong>WhatsApp Cloud API oficial</strong> (não Evolution/Baileys) hospedada no <strong>Render</strong>, com o estado no Supabase do Iuria. Anúncio pago mandando volume para número não oficial é banimento certo.</p></div>
+    <div class="card"><div class="eyebrow">Maior risco</div><p>Não é técnico. É a OAB (Provimento 205/2021) e a política de anúncios da Meta para serviços de dívida. O texto "reduzimos 30%" não pode ir ao ar como promessa (e juridicamente é mais frágil do que parece: o STJ já disse que o teto de 30% não vale para empréstimo comum). Dá para fazer, mas o enquadramento muda o copy e o script do robô.</p></div>
+    <div class="card"><div class="eyebrow">Até amanhã</div><p>Robô no ar respondendo no número novo, campanha criada em rascunho (pausada) com 3 criativos para você aprovar, link Asaas e fluxo de documentos ligados. Petição automática e protocolo entram na semana 2.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">02</span><h2>O que já existe e será reaproveitado</h2></div>
+  <p>Levantei direto no projeto Supabase <code>juridicopro</code> (o Iuria em produção) e nas contas conectadas nesta sessão.</p>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>Peça</th><th>Onde está</th><th>Como entra no funil</th></tr></thead>
+    <tbody>
+      <tr><td><span class="chip ok">existe</span> Upload de docs + procuração + contrato + assinatura</td><td>Edge functions <code>juroszero-upload-doc</code>, <code>juroszero-procuracao</code>, <code>juroszero-gerar-docs</code>, <code>juroszero-disparar-assinaturas</code>; tabela <code>juroszero_upload</code></td><td>Vira o fluxo "captação superendividamento". O robô gera o link por token e o cliente manda RG/CPF, endereço e renda pelo próprio WhatsApp (o robô faz o upload por ele).</td></tr>
+      <tr><td><span class="chip ok">existe</span> Assinatura eletrônica</td><td><code>autentique-enviar</code>, <code>autentique-webhook</code>, <code>autentique-status</code>; tabela <code>assinaturas</code></td><td>Procuração, contrato de honorários e declaração de superendividamento saem por aqui. O webhook avisa o robô quando assinou.</td></tr>
+      <tr><td><span class="chip ok">existe</span> Pagamento Asaas</td><td><code>asaas-webhook</code>, <code>comprar-credito</code> (padrão <code>externalReference</code>)</td><td>Cobrança de R$ 500 com referência <code>SE|&lt;lead&gt;</code>. Quando chega <code>PAYMENT_CONFIRMED</code>, o robô segue sozinho.</td></tr>
+      <tr><td><span class="chip ok">existe</span> Petição inicial por IA</td><td><code>gerar-inicial</code>, <code>extrair-dados-inicial</code>; tabela <code>inicial_entrevistas</code> (viabilidade + cálculo + peça)</td><td>A conversa do robô vira a "entrevista"; a IA gera a inicial de repactuação (art. 104-A do CDC) com o plano de pagamento.</td></tr>
+      <tr><td><span class="chip ok">existe</span> Distribuição e protocolo</td><td>Tabelas <code>distribuicoes</code> e <code>protocolo_fila</code> + autopet local (certificado A1, e-SAJ). Regra da casa: "o app nunca protocola; só enfileira".</td><td>É exatamente o "eu só entro para visualizar e protocolar". A peça fica na fila; você aprova; o autopet distribui no TJSP.</td></tr>
+      <tr><td><span class="chip ok">existe</span> CRM de leads</td><td>Tabela <code>crm_leads</code>; edges <code>crm-lead-notificar</code>, <code>crm-lead-acao</code>, <code>crm-sla-vigia</code></td><td>Cada conversa do anúncio vira um lead com <code>origem = ads_whatsapp</code>. O SLA já avisa se ninguém assumiu.</td></tr>
+      <tr><td><span class="chip ok">existe</span> Jurisprudência</td><td>Este repositório (scraper TJSP/STJ) + edge <code>buscar-jurisprudencia</code></td><td>Alimenta a base de conhecimento do robô (decisões sobre mínimo existencial e limite de descontos).</td></tr>
+      <tr><td><span class="chip ok">existe</span> Aviso de andamentos</td><td>Tabela <code>avisos_fila</code> ("Fase 2 WhatsApp", ainda vazia)</td><td>Depois de protocolado, o cliente recebe cada andamento no mesmo WhatsApp do robô.</td></tr>
+      <tr><td><span class="chip ok">existe</span> Conta de anúncios Meta</td><td>Conta <strong>Henrique Lacerda</strong> (BRL, com cartão, habilitada para automação); página <strong>HB Assessoria &amp; Consultoria</strong></td><td>É por onde o robô de campanha cria, mede e ajusta os anúncios. Confirmar se é essa página ou se cria uma do escritório.</td></tr>
+      <tr><td><span class="chip ok">existe</span> Hospedagem de bots</td><td>Render já roda <code>raiar-zap</code>, <code>raiar-bot</code> e <code>zapmemo-worker</code> (plano Starter)</td><td>Mesmo padrão: um serviço Node no Render para o robô. Sem servidor novo.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">03</span><h2>As cinco etapas, uma a uma</h2></div>
+
+  <div class="stage">
+    <div class="n">1<small>ANÚNCIO</small></div>
+    <div>
+      <h3>Anúncio + robô de campanha</h3>
+      <div class="tags"><span class="chip new">novo</span><span class="chip you">conta Meta</span><span class="chip risk">OAB + política Meta</span></div>
+      <p>Uma campanha no Meta com objetivo "Engajamento → Mensagens → WhatsApp" (Click-to-WhatsApp), orçamento de campanha R$ 100/dia, público amplo em São Paulo, 18+. O lead clica e já cai no número do robô com a mensagem pré-preenchida. O Meta manda junto o identificador do anúncio, então sabemos qual criativo gerou cada lead.</p>
+      <div class="cols">
+        <div><h4>O que o robô de campanha faz</h4>
+          <ul>
+            <li>A cada 4 h lê gasto, cliques, conversas iniciadas e, cruzando com o CRM, <strong>leads qualificados e pagos por criativo</strong>.</li>
+            <li>Pausa criativo com custo por lead qualificado acima do teto; sobe o orçamento no que converte, dentro dos R$ 100.</li>
+            <li>Toda segunda gera 3 criativos novos (imagem + texto) e manda para você aprovar no WhatsApp. Só publica o que você aprovou.</li>
+            <li>Relatório diário às 8 h: gasto, leads, pagos, custo por cliente.</li>
+          </ul>
+        </div>
+        <div><h4>Como</h4>
+          <ul>
+            <li>Meta Marketing API (a mesma conexão que já está ativa nesta sessão) para criar/pausar/ajustar.</li>
+            <li>Cron no Render, regras em tabela editável (teto de custo, orçamento, horários).</li>
+            <li>Criativos: texto por Claude, imagem por API de imagem; formato 1:1 e 9:16.</li>
+            <li>TikTok e Google ficam para a fase 2: no TikTok "serviços relacionados a dívidas" só rodam no Brasil com restrições (18+, avisos, licença); no Google exigem a Verificação de Serviços Financeiros (desde jun/2025). Nenhum dos dois tem exceção clara para escritório de advocacia. Sem valor em começar por eles.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="callout warn"><p><strong>Publicação 100 % automática de criativos não é recomendada nas primeiras semanas.</strong> Anúncio jurídico reprovado pela Meta ou denunciado à OAB custa mais que 1 minuto seu aprovando. O robô prepara tudo; você responde "ok" no WhatsApp.</p></div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="n">2<small>WHATSAPP</small></div>
+    <div>
+      <h3>Robô especialista no WhatsApp</h3>
+      <div class="tags"><span class="chip new">novo</span><span class="chip you">número + Cloud API</span></div>
+      <p>Número dedicado na <strong>WhatsApp Business Platform (Cloud API oficial)</strong>. O robô se apresenta como assistente virtual do escritório, explica a Lei 14.181/2021 em linguagem simples e faz a triagem. Ele é alimentado com a lei, o Decreto 11.150/2022, o CDC (arts. 54-A a 54-G e 104-A a 104-C) e acórdãos do TJSP/STJ puxados pelo scraper deste repositório.</p>
+      <div class="cols">
+        <div><h4>Roteiro da triagem</h4>
+          <ul>
+            <li>Renda mensal líquida e fonte (CLT, autônomo, aposentado, servidor).</li>
+            <li>Lista de dívidas: credor, tipo (consignado, cartão, empréstimo pessoal, cheque especial), parcela e saldo.</li>
+            <li>Exclusões da lei: financiamento imobiliário, crédito rural, produtos de luxo, dívida com garantia real, fraude.</li>
+            <li>Quanto sobra hoje depois das parcelas vs. o mínimo existencial. Calcula o percentual comprometido da renda.</li>
+            <li>Devolve um <strong>relatório de viabilidade</strong> em texto e PDF: "hoje X % da sua renda vai para dívidas; a lei permite pedir um plano judicial em até 5 anos preservando o mínimo existencial".</li>
+          </ul>
+        </div>
+        <div><h4>Depois do "sim"</h4>
+          <ul>
+            <li>Pede RG/CPF, comprovante de endereço e de renda pelo próprio chat (foto ou PDF); classifica com a edge <code>classificar-doc</code> e guarda no Storage.</li>
+            <li>Envia o link de pagamento Asaas (R$ 500) e o contrato/procuração para assinatura no Autentique. Explica o restante dos honorários.</li>
+            <li>Quando o Asaas confirma e o Autentique confirma, cria o cliente e o processo no Iuria e avisa você.</li>
+            <li>Lembretes automáticos em 24 h e 72 h para quem parou no meio (template aprovado pela Meta).</li>
+            <li>A qualquer momento "falar com advogado" passa a conversa para você ou para a equipe (handoff humano).</li>
+          </ul>
+        </div>
+      </div>
+      <div class="callout"><p><strong>Por que a API oficial e não Evolution/Baileys.</strong> Anúncio Click-to-WhatsApp só aponta para número de WhatsApp Business ligado à página. Volume vindo de anúncio em número não oficial é banido em dias. Na Cloud API a conversa aberta pelo anúncio é gratuita por 72 h (isso continua depois de outubro). Fora dessa janela, a partir de 01/10/2026 a Meta cobra cada resposta do robô (~R$ 0,035) e template de marketing sai ~R$ 0,32. Sem verificação de empresa na Meta o número fica limitado a 250 contatos novos por dia; verificado, sobe para 1.000 e cresce com a qualidade. Nesta sessão não há um "MCP do WhatsApp" para eu ativar: o que está conectado da Meta é só a parte de anúncios. O robô fala com a Cloud API direto por HTTP, o que é o caminho correto em produção.</p></div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="n">3<small>PAGAMENTO</small></div>
+    <div>
+      <h3>Entrada de R$ 500 no Asaas</h3>
+      <div class="tags"><span class="chip ok">existe</span><span class="chip new">ligação com o robô</span></div>
+      <p>Cobrança criada pela API do Asaas (Pix, boleto ou cartão) com <code>externalReference = SE|&lt;lead_id&gt;</code>. O webhook <code>asaas-webhook</code> que já existe recebe o <code>PAYMENT_CONFIRMED</code> e marca o lead como pago; o robô continua sem ninguém apertar botão. Honorários totais ficam registrados em <code>honorarios</code> (entrada + parcelas ou êxito).</p>
+      <div class="callout warn"><p><strong>Sugestão de ordem:</strong> mandar o contrato de honorários para assinatura <em>junto</em> com o link de pagamento, não depois. A OAB exige contrato escrito e isso derruba estorno/chargeback de quem paga e desiste.</p></div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="n">4<small>IURIA</small></div>
+    <div>
+      <h3>Cadastro, procuração, contrato, declaração e assinatura</h3>
+      <div class="tags"><span class="chip ok">existe</span><span class="chip new">modelos novos</span></div>
+      <p>Clone do fluxo JurosZero com <code>contrato_tipo = superendividamento</code>. Cria o cliente em <code>clientes</code>, o processo em <code>processos</code>, gera os PDFs e dispara para o Autentique. Três modelos novos:</p>
+      <ul>
+        <li><strong>Procuração</strong> ad judicia com poderes para transigir (necessário para a audiência de conciliação do art. 104-A).</li>
+        <li><strong>Contrato de honorários</strong> com entrada de R$ 500 e o restante como você definir.</li>
+        <li><strong>Declaração de superendividamento</strong>: relação de credores, renda, despesas e proposta de plano, assinada pelo cliente. Já vai como anexo da inicial.</li>
+      </ul>
+      <p>Quando <code>autentique-webhook</code> marcar tudo assinado, o robô manda os PDFs assinados ao cliente e abre a etapa 5.</p>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="n">5<small>PROTOCOLO</small></div>
+    <div>
+      <h3>Petição pronta, você aprova, autopet distribui</h3>
+      <div class="tags"><span class="chip ok">existe</span><span class="chip you">revisão + certificado A1</span></div>
+      <p>A conversa e os documentos viram uma <code>inicial_entrevistas</code> com <code>tipo_acao = superendividamento</code>. A edge <code>gerar-inicial</code> produz a petição de repactuação (art. 104-A) com o plano de pagamento e a lista de credores, junta extratos, contratos e comprovantes, e enfileira em <code>distribuicoes</code>. Você recebe no Telegram/WhatsApp: "petição de Fulano pronta, revisar". Só depois do seu ok o autopet distribui no e-SAJ com o seu certificado.</p>
+      <p>Depois de distribuído, os andamentos entram pelo DataJud/DJEN que o Iuria já monitora e saem para o cliente pela <code>avisos_fila</code>.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">04</span><h2>Decisões técnicas</h2></div>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>Decisão</th><th>Escolha</th><th>Por quê</th></tr></thead>
+    <tbody>
+      <tr><td>Onde o robô roda</td><td><strong>Render</strong> (web service Starter para o webhook + cron jobs)</td><td>Você já opera 3 bots lá. Vercel é serverless (função de no máximo 300 a 800 s, cron 1×/dia no Hobby): não serve para fila, worker e cron de campanha. A VPS DigitalOcean deste repositório serviria igualmente bem (custo marginal zero, docker-compose), mas ainda não foi provisionada; se você preferir concentrar tudo nela, o robô sobe lá sem mudar código.</td></tr>
+      <tr><td>Estado e dados</td><td>Supabase <code>juridicopro</code>, tabelas novas com prefixo <code>se_</code> (<code>se_conversas</code>, <code>se_triagem</code>, <code>se_regras_campanha</code>)</td><td>Cliente, processo, documento, assinatura e pagamento já vivem lá. Um banco só, um lugar para você olhar.</td></tr>
+      <tr><td>WhatsApp</td><td>Cloud API oficial, número novo, sem app instalado no chip</td><td>Exigência do anúncio Click-to-WhatsApp e único caminho sem risco de ban. O chip só recebe o SMS de verificação.</td></tr>
+      <tr><td>Anúncios</td><td>Meta primeiro; TikTok e Google na fase 2</td><td>Conta e página já conectadas. As outras exigem aprovação de app e têm política mais dura para "dívidas".</td></tr>
+      <tr><td>IA do robô</td><td>Claude (mesmo padrão das edges do Iuria) com base de conhecimento própria e ferramentas: calcular comprometimento de renda, buscar jurisprudência, gerar link Asaas, gerar link de upload</td><td>Reaproveita os custos e o controle de crédito de IA que o Iuria já contabiliza.</td></tr>
+      <tr><td>Handoff humano</td><td>Palavra-chave ou pedido explícito transfere para você; o robô para de responder naquele contato</td><td>Exigido na prática pela ética da OAB: análise jurídica é do advogado.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">05</span><h2>Sugestões e alertas antes de ligar</h2></div>
+
+  <div class="risk"><div class="sev"><span class="chip risk">alto</span></div><div>
+    <h3>O "30 %" não pode ser promessa no anúncio nem no robô</h3>
+    <p>A Lei 14.181/2021 garante o direito de pedir repactuação com audiência global de conciliação, plano de até 5 anos (art. 104-A) ou plano judicial compulsório (art. 104-B), e a preservação do <strong>mínimo existencial</strong>, hoje R$ 600 (Decreto 11.567/2023). Em abril de 2026 o STF validou o valor por decreto, mandou o CMN revisá-lo anualmente e derrubou a exclusão do consignado do cálculo. O "30/35 %" vem da margem do consignado (Lei 10.820) e de decisões isoladas: o TJSP limitou descontos a 35 % da renda em um agravo de 2023, mas outra câmara negou no mesmo mês, e o STJ (Tema 1.085) diz que o limite de 30 % <em>não</em> vale para empréstimo comum debitado em conta. Não há súmula. Existe base para pedir, mas é caso a caso.</p>
+    <p><strong>Como fica:</strong> "a Justiça pode limitar o quanto da sua renda vai para dívidas e reorganizar tudo num plano de até 5 anos; a gente analisa se o seu caso se enquadra". Nunca "reduzimos 30 %".</p>
+  </div></div>
+
+  <div class="risk"><div class="sev"><span class="chip risk">alto</span></div><div>
+    <h3>OAB: Provimento 205/2021</h3>
+    <p>Publicidade de advocacia tem que ser informativa. Anúncio pago (impulsionamento, link patrocinado) é permitido, mas são vedados: referência a valores ou descontos, promessa de resultado, caso concreto mesmo anonimizado (OAB/SP), conteúdo sensacionalista e anúncio dirigido a captação direta ("clique e reduza suas parcelas"). Para IA, a Recomendação CFOAB 001/2024 exige supervisão humana, sigilo, LGPD e avisar o cliente de que há IA no atendimento; o chatbot não pode dar orientação jurídica sem advogado responsável, e os sócios respondem pela supervisão (OAB/SP, 2026).</p>
+    <p><strong>Como fica:</strong> criativos no formato "você sabia que existe uma lei para quem está superendividado?", chamada "tire suas dúvidas", nome e OAB do escritório visíveis, robô que se apresenta como assistente e encaminha ao advogado para a análise final. O escopo já assume isso; se você quiser o copy mais agressivo, a decisão é sua e eu registro.</p>
+  </div></div>
+
+  <div class="risk"><div class="sev"><span class="chip risk">médio</span></div><div>
+    <h3>Política de anúncios da Meta para dívidas</h3>
+    <p>Anúncio sobre renegociação de dívida cai em "produtos e serviços financeiros" (restrito): público 18+, sem coletar dado financeiro no próprio anúncio, sem promessa enganosa. Rejeições típicas: "elimine suas dívidas", "limpe seu nome". Há relatos de que a verificação de anunciante financeiro passou a valer no Brasil em 2026; não confirmei na página oficial, então o robô de campanha já prevê esse pedido. Primeiro criativo demora mais para aprovar.</p>
+    <p><strong>Como fica:</strong> começar com 3 criativos informativos, sem "R$", sem "garantido", e deixar o robô de campanha reagir à reprovação (troca o criativo, avisa você).</p>
+  </div></div>
+
+  <div class="risk"><div class="sev"><span class="chip risk">médio</span></div><div>
+    <h3>LGPD: RG, CPF e extratos no WhatsApp</h3>
+    <p>São dados pessoais e financeiros. O robô pede consentimento explícito antes de receber documento, guarda no Storage do Iuria (não na Meta), e apaga da conversa. Política de privacidade curta linkada na primeira mensagem.</p>
+  </div></div>
+
+  <div class="risk"><div class="sev"><span class="chip risk">baixo</span></div><div>
+    <h3>Onde protocolar em São Paulo</h3>
+    <p>Judicial: ação de repactuação (art. 104-A) na Vara Cível, não no Juizado (rito incompatível com a Lei 9.099). Pré-processual: o TJSP tem o Programa de Combate ao Superendividamento, com formulário no e-SAJ encaminhado ao Procon-SP (classe 11875, Reclamação Pré-processual, assunto 15048, Comunicado CG 718/2022), sem custo e mais rápido para acordo. A petição gerada segue o rito judicial; a via pré-processual fica como opção que você escolhe caso a caso. Protocolo no e-SAJ continua exigindo certificado A1/A3 com Web Signer; não há API pública de protocolo para escritórios, por isso o autopet local com o seu certificado permanece como o caminho.</p>
+  </div></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">06</span><h2>Custo mensal estimado</h2></div>
+  <div class="tbl">
+  <table>
+    <thead><tr><th>Item</th><th class="num-cell">Estimativa</th><th>Observação</th></tr></thead>
+    <tbody>
+      <tr><td>Mídia Meta</td><td class="num-cell">R$ 3.000</td><td>R$ 100/dia. É o único custo grande.</td></tr>
+      <tr><td>WhatsApp Cloud API</td><td class="num-cell">R$ 0 a 200</td><td>Conversa aberta por anúncio é grátis por 72 h. Depois disso, a partir de 01/10/2026, ~R$ 0,035 por resposta do robô e ~R$ 0,32 por template de marketing (lembretes).</td></tr>
+      <tr><td>Render (robô + cron)</td><td class="num-cell">~R$ 45 a 130</td><td>Web service Starter US$ 7 + cron job (mínimo US$ 1). Worker separado só se o volume pedir.</td></tr>
+      <tr><td>IA (Claude)</td><td class="num-cell">R$ 150 a 500</td><td>Depende do volume de conversas; ~R$ 0,50 a 1,50 por lead triado.</td></tr>
+      <tr><td>Autentique</td><td class="num-cell">~R$ 0,50 por cliente</td><td>R$ 0,06 por documento criado + R$ 0,12 por envio via WhatsApp; 3 documentos por cliente. Consumo abate do plano que o Iuria já paga.</td></tr>
+      <tr><td>Asaas</td><td class="num-cell">taxa por cobrança</td><td>Já contratado. Pix é a opção mais barata.</td></tr>
+      <tr><td>VPS scraper</td><td class="num-cell">R$ 60 a 70</td><td>Já previsto no repositório; só se você quiser a jurisprudência do TJSP ao vivo no robô.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="small">Valores de referência para dimensionar, não orçamento fechado. Os preços por conversa do WhatsApp e das APIs mudam com frequência; confirmo os valores exatos na fase de contratação.</p>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">07</span><h2>Plano: hoje, amanhã, semana 2</h2></div>
+  <div class="plan">
+    <div class="day">
+      <h3>Hoje <span>dia 1</span></h3>
+      <ul>
+        <li><span class="chip you">George</span> comprar o chip; criar o app na Meta for Developers e adicionar o número na WhatsApp Business Platform; gerar token permanente; confirmar página e conta de anúncios.</li>
+        <li>Serviço do robô no Render: webhook verificado, recebendo e respondendo mensagens no número novo.</li>
+        <li>Base de conhecimento: lei, decreto, CDC e 30 acórdãos selecionados (TJSP/STJ) sobre mínimo existencial e limite de descontos.</li>
+        <li>Script de triagem e cálculo de comprometimento de renda; relatório de viabilidade em PDF.</li>
+        <li>Tabelas <code>se_*</code> no Supabase e lead entrando em <code>crm_leads</code>.</li>
+        <li>Campanha Meta criada <strong>pausada</strong>, com 3 criativos para sua aprovação.</li>
+      </ul>
+    </div>
+    <div class="day">
+      <h3>Amanhã <span>dia 2</span></h3>
+      <ul>
+        <li>Link Asaas gerado pelo robô e confirmação automática pelo webhook.</li>
+        <li>Fluxo JurosZero clonado como "superendividamento": upload pelo chat, procuração, contrato e declaração no Autentique.</li>
+        <li>Templates de lembrete (24 h / 72 h) submetidos à Meta.</li>
+        <li>Teste ponta a ponta com o seu número: anúncio de teste → robô → pagamento sandbox → assinatura → cliente criado no Iuria.</li>
+        <li><span class="chip you">George</span> aprova os criativos → campanha ativa a R$ 100/dia.</li>
+      </ul>
+    </div>
+    <div class="day">
+      <h3>Semana 2 <span>dias 3 a 10</span></h3>
+      <ul>
+        <li>Petição de repactuação gerada pela IA a partir da conversa + documentos (<code>gerar-inicial</code>, tipo novo).</li>
+        <li>Fila <code>distribuicoes</code> → sua revisão → autopet distribui no e-SAJ.</li>
+        <li>Robô de campanha com regras automáticas (pausar/escalar) e criativos semanais para aprovação.</li>
+        <li>Avisos de andamento ao cliente pelo WhatsApp.</li>
+        <li>Fase 2: TikTok Ads e Google Ads; expansão para outros tribunais.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">08</span><h2>O que só você pode fazer</h2></div>
+  <ul class="check">
+    <li><span class="box"></span><span><strong>Chip e número.</strong> Qualquer operadora. Não instalar o WhatsApp no chip; ele só recebe o SMS de verificação da Cloud API.</span></li>
+    <li><span class="box"></span><span><strong>Meta for Developers.</strong> Criar o app, produto "WhatsApp", adicionar o número, gerar token permanente de sistema e me passar: <code>WHATSAPP_TOKEN</code>, <code>PHONE_NUMBER_ID</code>, <code>WABA_ID</code>. Fazer a verificação de empresa na Meta (CNPJ + documento): sem ela o número atende só 250 contatos novos por dia.</span></li>
+    <li><span class="box"></span><span><strong>Página e conta de anúncios.</strong> Confirmar se a campanha sai pela página "HB Assessoria &amp; Consultoria" na conta "Henrique Lacerda" ou se cria uma página do escritório (com nome e OAB).</span></li>
+    <li><span class="box done"></span><span><strong>Asaas.</strong> Já integrado no Iuria. Só confirmar a chave usada em produção e se a cobrança sai da mesma conta.</span></li>
+    <li><span class="box done"></span><span><strong>Autentique.</strong> Já integrado. Confirmar franquia do plano.</span></li>
+    <li><span class="box"></span><span><strong>Modelos.</strong> Procuração, contrato de honorários (R$ 500 de entrada + restante) e texto-base da declaração. Se não tiver, eu redijo a partir dos que o JurosZero usa e você revisa.</span></li>
+    <li><span class="box"></span><span><strong>Render.</strong> Autorizar a criação do serviço e o deploy a partir de um repositório novo (<code>superendividamento-bot</code>) ou de uma pasta neste.</span></li>
+    <li><span class="box"></span><span><strong>Chaves.</strong> <code>ANTHROPIC_API_KEY</code>, <code>SUPABASE_SERVICE_ROLE</code> do juridicopro (já usada pelas edges), chave da API de imagem para criativos.</span></li>
+    <li><span class="box"></span><span><strong>Decisão de copy.</strong> Informativo (recomendado) ou direto. Muda o texto dos criativos e a primeira mensagem do robô.</span></li>
+  </ul>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">09</span><h2>Perguntas em aberto</h2></div>
+  <ul>
+    <li>Restante dos honorários: percentual do valor renegociado, parcelas fixas, ou êxito? Define o contrato e o que o robô pode dizer.</li>
+    <li>Quem faz o handoff humano quando o lead pede advogado: você, ou alguém da equipe com acesso ao Iuria?</li>
+    <li>Horário de atendimento do robô: 24 h de verdade, ou triagem 24 h e cobrança só em horário comercial?</li>
+    <li>Nome do robô e da página. Sugiro nome próprio + "assistente virtual do escritório X".</li>
+  </ul>
+</section>
+
+<footer>
+  <p>Escopo levantado a partir do repositório <code>iuria-scraper-vps</code>, do projeto Supabase <code>juridicopro</code>, das contas Meta, Render, Vercel e Supabase conectadas nesta sessão. Nenhuma alteração foi feita em produção. Este arquivo vive em <code>docs/escopo-superendividamento.html</code> no branch de trabalho.</p>
+</footer>
+</div>

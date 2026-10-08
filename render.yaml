@@ -1,0 +1,65 @@
+# Blueprint do Render para o robô WhatsApp Superendividamento.
+# O scraper de jurisprudência (raiz do repo) continua na VPS; aqui só o bot.
+services:
+  - type: web
+    name: superendividamento-bot
+    runtime: node
+    region: virginia
+    plan: starter
+    rootDir: bot
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: PHONE_NUMBER_ID
+        sync: false
+      - key: WABA_ID
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
+      - key: WEBHOOK_VERIFY_TOKEN
+        generateValue: true
+      - key: SUPABASE_URL
+        value: https://mvlhkyqsywqhlrqrdeje.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: NOME_ROBO
+        value: Paula
+      - key: NOME_ESCRITORIO
+        value: o escritório
+      - key: ESCRITORIO_ID
+        sync: false
+      - key: ADVOGADO_NOME
+        sync: false
+      - key: ADVOGADO_OAB
+        sync: false
+      - key: HONORARIOS_ENTRADA
+        value: "500"
+      - key: ASAAS_API_KEY
+        sync: false
+      - key: ASAAS_BASE_URL
+        value: https://api-sandbox.asaas.com/v3
+      - key: ASAAS_WEBHOOK_TOKEN
+        generateValue: true
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: META_ADS_TOKEN
+        sync: false
+      - key: META_AD_ACCOUNT_ID
+        value: "1644195394050777"
+      - key: META_PAGE_ID
+        sync: false
+      - key: CAMPANHA_AUTOPAUSAR
+        value: "off"
+      - key: SISTEMA_PADRAO
+        value: eproc
+      - key: OPERADOR_WHATSAPP
+        sync: false
