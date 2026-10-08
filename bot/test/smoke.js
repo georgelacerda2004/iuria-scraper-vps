@@ -56,6 +56,8 @@ const fakeApi = { beta: { messages: { create: async (req) => {
   assert.equal(req.model, 'claude-opus-5-5');
   assert.equal(req.fallbacks, 'default');
   assert.ok(req.tools.every(t => t.strict === true));
+  assert.equal(req.system.length, 1); // triagem: só o bloco cacheado
+  assert.ok(req.tools.some(t => t.name === 'aceitar_proposta'));
   if (chamadas === 1) return { stop_reason: 'tool_use', usage: { input_tokens: 10, output_tokens: 5 }, content: [
     { type: 'text', text: 'Deixa eu calcular.' },
     { type: 'tool_use', id: 't1', name: 'calcular_comprometimento', input: { renda_liquida: 3000, despesas_essenciais: 0, dividas: [{ credor: 'Banco A', tipo: 'consignado', parcela_mensal: 1200, saldo_total: 0 }] } },
@@ -67,6 +69,14 @@ const fakeApi = { beta: { messages: { create: async (req) => {
   return { stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 5 }, content: [{ type: 'text', text: 'Hoje 40% da sua renda vai para dívidas.' }] };
 } } } };
 const r = await responder({ historico: [], textoAtual: 'ganho 3 mil e pago 1200 de consignado', api: fakeApi });
+// fase proposta: segundo bloco de system com o roteiro; aceitar_proposta devolve proposta
+const fakeProp = { beta: { messages: { create: async (req) => {
+  assert.equal(req.system.length, 2); assert.match(req.system[1].text, /FASE ATUAL: PROPOSTA/); assert.match(req.system[1].text, /R\$ 500,00/);
+  if (req.messages.length === 1) return { stop_reason: 'tool_use', usage: {}, content: [{ type: 'tool_use', id: 'p1', name: 'aceitar_proposta', input: { pagamento: 'agora' } }] };
+  return { stop_reason: 'end_turn', usage: {}, content: [{ type: 'text', text: 'Combinado!' }] };
+} } } };
+const rp = await responder({ historico: [], textoAtual: 'quero seguir', fase: 'proposta', api: fakeProp });
+assert.deepEqual(rp.proposta, { aceita: true, pagamento: 'agora' }); assert.equal(rp.texto, 'Combinado!');
 assert.equal(chamadas, 2);
 assert.match(r.texto, /40%/);
 assert.equal(r.calculo.percentual_renda_comprometido, 40);
@@ -80,10 +90,17 @@ assert.equal(f.patch.etapa, 'triagem');
 f = await proximoPasso({ etapa: 'triagem' }, { texto: 'quero falar com advogado' });
 assert.equal(f.patch.etapa, 'handoff');
 f = await proximoPasso({ etapa: 'triagem' }, { texto: 'ganho 3 mil' }, { ia: async () => ({ texto: 'ok', triagem: { resultado: 'favoravel', resumo: 'x' }, calculo: { percentual_renda_comprometido: 40 } }) });
-assert.equal(f.patch.etapa, 'docs'); // favorável: já pede o RG no mesmo turno
-assert.equal(f.respostas.length, 2);
-assert.match(f.respostas[1], /RG ou CNH/);
+assert.equal(f.patch.etapa, 'proposta'); // favorável: Paula explica o processo e as condições antes dos documentos
+assert.equal(f.respostas.length, 1);
 assert.equal(f.patch.triagem.calculo.percentual_renda_comprometido, 40);
+// proposta aceita → pede o RG no mesmo turno e guarda a forma da entrada
+let faseVista = null;
+f = await proximoPasso({ etapa: 'proposta', triagem: { resultado: 'favoravel' } }, { texto: 'quero sim' }, { ia: async ({ fase }) => { faseVista = fase; return { texto: 'Ótimo!', proposta: { aceita: true, pagamento: 'apos_liminar' } }; } });
+assert.equal(faseVista, 'proposta');
+assert.equal(f.patch.etapa, 'docs'); assert.equal(f.respostas.length, 2); assert.match(f.respostas[1], /RG ou CNH/);
+assert.equal(f.patch.triagem.pagamento, 'apos_liminar'); assert.equal(f.patch.triagem.resultado, 'favoravel');
+f = await proximoPasso({ etapa: 'proposta', triagem: {} }, { texto: 'não quero' }, { ia: async () => ({ texto: 'Tudo bem.', proposta: { aceita: false, motivo: 'sem interesse' } }) });
+assert.equal(f.patch.etapa, 'desistiu');
 f = await proximoPasso({ etapa: 'triagem' }, { texto: 'x' }, { ia: async () => ({ texto: 'ok', triagem: { resultado: 'favoravel', resumo: 'x' }, handoff: 'pediu advogado' }) });
 assert.equal(f.patch.etapa, 'handoff'); // pedido explícito vence
 assert.equal(f.respostas.length, 1);
@@ -100,6 +117,8 @@ const clienteFake = { id: 'cli-1', nome: 'Maria Silva Souza', cpf: '123.456.789-
 const triagemFake = { resumo: 'ok', fonte_renda: 'clt', calculo: { renda_liquida: 3000, parcelas_mensais_consideradas: 1300, percentual_renda_comprometido: 43.3, sobra_mensal: -600, minimo_existencial: 600 }, dividas: [{ credor: 'Banco A', tipo: 'consignado', parcela_mensal: 900, saldo_total: 20000 }] };
 const pdfs = await gerarTodos(clienteFake, triagemFake);
 assert.equal(pdfs.length, 3);
+const pdfsDif = await gerarTodos(clienteFake, { ...triagemFake, pagamento: 'apos_liminar' });
+assert.ok(pdfsDif[1].pdf.length > 1500 && pdfsDif[1].pdf.length !== pdfs[1].pdf.length, 'contrato diferido deveria mudar');
 for (const d of pdfs) { assert.ok(d.pdf.length > 1500, d.tipo + ' pequeno demais'); assert.equal(d.pdf.subarray(0, 4).toString(), '%PDF'); }
 
 // --- captacao: documentos pelo chat ---
@@ -135,6 +154,12 @@ assert.equal(cc.patch.etapa, 'pagamento_assinatura');
 assert.deepEqual(enviados, ['se_procuracao', 'se_contrato', 'se_declaracao']);
 assert.match(cc.respostas[0], /https:\/\/asaas\/pay_1/);
 assert.match(cc.respostas[0], /3\. Declaração/);
+let cobrou = false;
+const ccDif = await concluirCadastro({ ...conv, triagem: { ...conv.triagem, pagamento: 'apos_liminar' } }, {
+  criarCliente: async () => clienteFake, registrarDoc: async () => {}, asaasCliente: async () => { cobrou = true; return 'x'; }, asaasCobranca: async () => { cobrou = true; return {}; },
+  enviar: async ({ tipoDoc }) => ({ autentiqueId: 'a_' + tipoDoc, link: 'https://autentique/' + tipoDoc }),
+});
+assert.equal(cobrou, false); assert.equal(ccDif.patch.asaas_payment_id, null); assert.match(ccDif.respostas[0], /depois da liminar/); assert.doesNotMatch(ccDif.respostas[0], /asaas/);
 conv = { ...conv, ...cc.patch };
 
 // --- captacao: ainda pendente → só marca pago; depois concluído → processo ---
@@ -153,6 +178,9 @@ v = await verificarConclusao(conv, { ...vDeps, statusAss: async (ids) => ids.map
 assert.equal(v.patch.etapa, 'cliente'); assert.equal(v.patch.processo_id, 'proc-1'); assert.ok(avisos.length >= 1);
 await new Promise(r => setTimeout(r, 20)); assert.equal(avisos.length, 2); assert.match(avisos[1], /PETIÇÃO PRONTA/);
 assert.match(v.respostas[0], /tudo confirmado/i);
+let hon = null;
+const vDif = await verificarConclusao({ ...conv, pago_em: null, triagem: { ...conv.triagem, pagamento: 'apos_liminar' } }, { ...vDeps, consultarPagamento: async () => { throw new Error('não deveria consultar'); }, statusAss: async (ids) => ids.map(id => ({ autentique_id: id, status: 'assinado' })), honorario: async (h) => { hon = h; }, avisar: async () => {}, preparar: async () => ({}) });
+assert.equal(vDif.patch.etapa, 'cliente'); assert.equal(hon.diferido, true); assert.match(vDif.respostas[0], /documentos assinados/);
 
 // --- fluxo: viavel → docs ---
 f = await proximoPasso({ etapa: 'viavel', nome_perfil: 'Maria Silva' }, { texto: 'ok' });

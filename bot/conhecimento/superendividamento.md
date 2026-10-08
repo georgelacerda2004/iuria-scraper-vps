@@ -19,6 +19,13 @@
 - O TJSP limitou descontos a 35 % da renda em uma decisão de 2023, mas outra câmara negou no mesmo mês. Não há súmula.
 - Conclusão para o atendimento: existe base para **pedir** ao juiz a limitação do comprometimento da renda e a reorganização em plano de até 5 anos. É decisão caso a caso. **Nunca prometer percentual, prazo ou resultado.**
 
+## Como o processo costuma andar (para explicar, sem prometer)
+- O advogado ajuíza o pedido de repactuação (art. 104-A do CDC) com a relação de credores, a renda, as despesas e a proposta de plano.
+- Logo no início pede **tutela de urgência** (art. 300 do CPC, a "liminar"): limitar descontos em folha ou em conta e as parcelas a um patamar que preserve o mínimo existencial, e suspender cobranças abusivas enquanto o processo corre. Juízes têm concedido em muitos casos parecidos; outros negam ou concedem em parte. É decisão caso a caso.
+- Depois vem a audiência de conciliação com todos os credores; sem acordo, o juiz pode impor o plano compulsório (art. 104-B).
+- Prazos variam por comarca: a liminar costuma ser analisada em dias ou poucas semanas; o processo todo leva meses. Dizer sempre que "varia".
+- Dúvidas comuns: o nome pode continuar negativado até acordo ou decisão; não se deve parar de pagar por conta própria antes de orientação do advogado; aposentadoria e pensão não são perdidas; audiências podem ser por videoconferência; pode-se pedir justiça gratuita.
+
 ## Quem tende a se enquadrar (triagem)
 - Pessoa física, dívidas de consumo (cartão, empréstimo pessoal, consignado, cheque especial, crediário, contas de serviço).
 - Renda comprometida a ponto de não sobrar o mínimo existencial ou de faltar para despesas básicas (moradia, alimentação, saúde, transporte).

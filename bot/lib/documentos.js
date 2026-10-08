@@ -11,7 +11,9 @@ const ADV = () => ({
   foro: process.env.FORO_CONTRATO || 'São Paulo/SP',
 });
 const ENTRADA = () => Number(process.env.HONORARIOS_ENTRADA || 500);
-const RESTANTE = () => process.env.HONORARIOS_RESTANTE_TEXTO || 'o saldo dos honorários será ajustado em aditivo específico, por escrito, após a análise do caso, antes do ajuizamento';
+const EXITO_PCT = () => Number(process.env.HONORARIOS_EXITO_PCT || 30);
+const porExtenso = (n) => ({ 10: 'dez', 15: 'quinze', 20: 'vinte', 25: 'vinte e cinco', 30: 'trinta', 35: 'trinta e cinco', 40: 'quarenta' }[n] || String(n));
+const RESTANTE = () => process.env.HONORARIOS_RESTANTE_TEXTO || `honorários de êxito de ${EXITO_PCT()}% (${porExtenso(EXITO_PCT())} por cento) sobre o proveito econômico efetivamente obtido pelo(a) CONTRATANTE (redução do valor das parcelas, dos juros ou do saldo das dívidas, apurada pela diferença entre o que era exigido e o que ficou definido em acordo ou decisão), devidos somente ao final do processo e somente em caso de resultado favorável`;
 
 const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 function dataExtenso(d = new Date()) { return `${d.getDate()} de ${MESES[d.getMonth()]} de ${d.getFullYear()}`; }
@@ -60,7 +62,8 @@ export async function gerarProcuracao(c) {
   doc.end(); return done;
 }
 
-export async function gerarContrato(c) {
+export async function gerarContrato(c, triagem = {}) {
+  const diferido = triagem.pagamento === 'apos_liminar';
   const a = ADV(); const { doc, done } = novoDoc();
   titulo(doc, 'Contrato de Prestação de Serviços Advocatícios');
   sub(doc, 'Contratante'); par(doc, qualificacao(c) + '.');
@@ -69,7 +72,9 @@ export async function gerarContrato(c) {
   sub(doc, 'Cláusula 1ª — Objeto');
   par(doc, 'O(A) CONTRATADO(A) prestará ao(à) CONTRATANTE os serviços de análise jurídica da situação de superendividamento, elaboração do plano de pagamento e propositura e acompanhamento do processo de repactuação de dívidas previsto nos arts. 104-A a 104-C do Código de Defesa do Consumidor (Lei 14.181/2021), incluída a fase de conciliação, e, se necessário, o pedido de plano judicial compulsório, até decisão final em primeira instância.');
   sub(doc, 'Cláusula 2ª — Honorários');
-  par(doc, `Pelos serviços, o(a) CONTRATANTE pagará ao(à) CONTRATADO(A), a título de entrada, o valor de ${brl(ENTRADA())}, por meio de cobrança eletrônica, no ato da contratação. Quanto ao restante: ${RESTANTE()}.`);
+  par(doc, diferido
+    ? `Pelos serviços, o(a) CONTRATANTE pagará ao(à) CONTRATADO(A), a título de entrada, o valor de ${brl(ENTRADA())}. Considerando a situação financeira declarada, as partes ajustam que a entrada será devida em até 10 (dez) dias após a intimação da decisão que deferir, ainda que em parte, a tutela de urgência (liminar) requerida na ação; não sendo deferida, as partes ajustarão por escrito nova data, sem prejuízo da continuidade dos serviços. Quanto ao restante: ${RESTANTE()}.`
+    : `Pelos serviços, o(a) CONTRATANTE pagará ao(à) CONTRATADO(A), a título de entrada, o valor de ${brl(ENTRADA())}, por meio de cobrança eletrônica, no ato da contratação. Quanto ao restante: ${RESTANTE()}.`);
   par(doc, 'Os honorários de sucumbência eventualmente fixados pertencem ao(à) CONTRATADO(A), nos termos do art. 23 da Lei 8.906/1994, sem compensação com os honorários contratuais.');
   sub(doc, 'Cláusula 3ª — Sem promessa de resultado');
   par(doc, 'O(A) CONTRATANTE declara estar ciente de que a obrigação do(a) CONTRATADO(A) é de meio, e não de resultado: a redução, o parcelamento ou a limitação de descontos dependem de decisão judicial e da conciliação com os credores, não havendo garantia de percentual, prazo ou êxito.');
@@ -107,7 +112,7 @@ export async function gerarDeclaracao(c, triagem = {}) {
 }
 
 export async function gerarTodos(cliente, triagem) {
-  const [procuracao, contrato, declaracao] = await Promise.all([gerarProcuracao(cliente), gerarContrato(cliente), gerarDeclaracao(cliente, triagem)]);
+  const [procuracao, contrato, declaracao] = await Promise.all([gerarProcuracao(cliente), gerarContrato(cliente, triagem), gerarDeclaracao(cliente, triagem)]);
   return [
     { tipo: 'se_procuracao', nome: 'Procuração - Superendividamento', pdf: procuracao },
     { tipo: 'se_contrato', nome: 'Contrato de Honorários - Superendividamento', pdf: contrato },

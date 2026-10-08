@@ -13,6 +13,7 @@ const SLOTS = [
   { slot: 'renda', pede: 'Perfeito. Por último, um *comprovante de renda*: holerite, extrato do INSS ou extrato bancário dos últimos 3 meses.', aceita: /renda|holerite|extrato|imposto|ctps/i },
 ];
 const NOME_ROBO = () => process.env.NOME_ROBO || 'Paula';
+export const pagamentoDiferido = (triagem) => (triagem || {}).pagamento === 'apos_liminar';
 const ENTRADA = () => Number(process.env.HONORARIOS_ENTRADA || 500);
 const soDigitos = v => String(v || '').replace(/\D/g, '');
 // CPF: 11 dígitos, não repetidos, com os dois dígitos verificadores corretos.
@@ -31,13 +32,16 @@ export const MSG = {
   semArquivo: (pede) => `Preciso do arquivo (foto ou PDF) para seguir. ${pede}`,
   processando: 'Recebi os 3 documentos, obrigado! Estou preparando o seu cadastro e os documentos para assinatura. Leva um minutinho.',
   pedirCpf: 'Recebi os documentos, obrigado! Só não consegui ler o seu *CPF* na foto. Me manda o número do CPF (só os dígitos) para eu finalizar o cadastro.',
-  linksEnvio: ({ valor, urlPagamento, docs }) =>
-    `Pronto! Para seguir com o seu caso, são dois passos:\n\n` +
+  linksEnvio: ({ valor, urlPagamento, docs }) => urlPagamento
+    ? `Pronto! Para seguir com o seu caso, são dois passos:\n\n` +
     `1) *Entrada dos honorários* (R$ ${valor.toFixed(2).replace('.', ',')}), por Pix, boleto ou cartão:\n${urlPagamento}\n\n` +
     `2) *Assinar pelo celular* (clique, confira e assine):\n` + docs.map((d, i) => `${i + 1}. ${d.nome}: ${d.link}`).join('\n') +
-    `\n\nAssim que o pagamento e as assinaturas forem confirmados, eu aviso o advogado e ele assume. Qualquer dúvida sobre o contrato, é só perguntar.`,
-  aguardando: ({ pago, assinados, total }) => `Status: pagamento ${pago ? 'confirmado ✅' : 'pendente'}; assinaturas ${assinados}/${total}. ${pago && assinados === total ? 'Tudo certo!' : 'Quando concluir, eu sigo automaticamente.'}`,
-  concluido: (nome) => `${nome ? nome.split(' ')[0] + ', t' : 'T'}udo confirmado: pagamento e documentos assinados. Seu caso já está cadastrado e o advogado vai revisar e entrar em contato por aqui. Se tiver extratos ou contratos das dívidas, pode mandar por aqui que eu guardo na sua pasta.`,
+    `\n\nAssim que o pagamento e as assinaturas forem confirmados, eu aviso o advogado e ele assume. Qualquer dúvida sobre o contrato, é só perguntar.`
+    : `Pronto! Como combinamos, a entrada de R$ ${valor.toFixed(2).replace('.', ',')} fica para depois da liminar: isso está escrito no contrato. Agora só falta *assinar pelo celular* (clique, confira e assine):\n` +
+    docs.map((d, i) => `${i + 1}. ${d.nome}: ${d.link}`).join('\n') +
+    `\n\nAssim que as assinaturas forem confirmadas, eu aviso o advogado e ele assume. Qualquer dúvida sobre o contrato, é só perguntar.`,
+  aguardando: ({ pago, assinados, total, diferido }) => `Status: ${diferido ? 'entrada combinada para depois da liminar' : `pagamento ${pago ? 'confirmado ✅' : 'pendente'}`}; assinaturas ${assinados}/${total}. ${(pago || diferido) && assinados === total ? 'Tudo certo!' : 'Quando concluir, eu sigo automaticamente.'}`,
+  concluido: (nome, diferido) => `${nome ? nome.split(' ')[0] + ', t' : 'T'}udo confirmado: ${diferido ? 'documentos assinados' : 'pagamento e documentos assinados'}. Seu caso já está cadastrado e o advogado vai revisar e entrar em contato por aqui. Se tiver extratos ou contratos das dívidas, pode mandar por aqui que eu guardo na sua pasta.`,
   erro: 'Tive um problema ao processar. Já avisei a equipe; eles continuam com você por aqui.',
 };
 
@@ -102,9 +106,14 @@ export async function concluirCadastro(conversa, deps = {}) {
     if (d?.path) await registrarDoc({ clienteId: cliente.id, nome: `${slot} (robô WhatsApp)`, tipo: d.tipo || 'Outro', storagePath: d.path, mime: d.mime, bytes: d.bytes, dados: null, criadoPor: cliente.criado_por });
   }
 
+  // Entrada agora (cobrança Asaas) ou combinada para depois da liminar (sem cobrança; vai no contrato).
+  const diferido = pagamentoDiferido(triagem);
   const referencia = `SE|${conversa.id}`;
-  const customerId = await asaasCliente({ nome: cliente.nome, cpf: cliente.cpf, celular: conversa.wa_id, email: cliente.email1 });
-  const cobranca = await asaasCobranca({ customerId, valor: ENTRADA(), referencia, descricao: 'Entrada de honorários — análise e repactuação de dívidas (Lei 14.181/2021)' });
+  let cobranca = null;
+  if (!diferido) {
+    const customerId = await asaasCliente({ nome: cliente.nome, cpf: cliente.cpf, celular: conversa.wa_id, email: cliente.email1 });
+    cobranca = await asaasCobranca({ customerId, valor: ENTRADA(), referencia, descricao: 'Entrada de honorários — análise e repactuação de dívidas (Lei 14.181/2021)' });
+  }
 
   const pdfs = await gerar(cliente, triagem);
   const docs = [];
@@ -114,8 +123,8 @@ export async function concluirCadastro(conversa, deps = {}) {
   }
 
   return {
-    respostas: [MSG.linksEnvio({ valor: ENTRADA(), urlPagamento: cobranca.url, docs })],
-    patch: { etapa: 'pagamento_assinatura', cliente_id: cliente.id, asaas_payment_id: cobranca.id, triagem: { ...triagem, cobranca: { id: cobranca.id, url: cobranca.url, referencia }, assinaturas: docs } },
+    respostas: [MSG.linksEnvio({ valor: ENTRADA(), urlPagamento: cobranca?.url || null, docs })],
+    patch: { etapa: 'pagamento_assinatura', cliente_id: cliente.id, asaas_payment_id: cobranca?.id || null, triagem: { ...triagem, cobranca: cobranca ? { id: cobranca.id, url: cobranca.url, referencia } : { diferida: true, referencia }, assinaturas: docs } },
   };
 }
 
@@ -124,8 +133,9 @@ export async function verificarConclusao(conversa, deps = {}) {
   const { consultarPagamento = asaas.consultarPorReferencia, statusAss = iuria.statusAssinaturas, criarProcesso = iuria.criarProcesso, criarEntrevista = iuria.criarEntrevista, honorario = iuria.registrarHonorario, avisar = iuria.avisarOperador, cliente } = deps;
   const triagem = conversa.triagem || {};
   const patch = {};
+  const diferido = pagamentoDiferido(triagem);
   let pago = !!conversa.pago_em;
-  if (!pago) {
+  if (!pago && !diferido) {
     const r = await consultarPagamento(triagem.cobranca?.referencia || `SE|${conversa.id}`);
     if (r.pago) { pago = true; patch.pago_em = new Date().toISOString(); }
   }
@@ -136,18 +146,18 @@ export async function verificarConclusao(conversa, deps = {}) {
   const tudoAssinado = total > 0 && assinados === total;
   if (tudoAssinado && !conversa.assinado_em) patch.assinado_em = new Date().toISOString();
 
-  if (!(pago && tudoAssinado)) return Object.keys(patch).length ? { respostas: [], patch } : null;
+  if (!((pago || diferido) && tudoAssinado)) return Object.keys(patch).length ? { respostas: [], patch } : null;
 
   const cli = cliente || (deps.buscarCliente || iuria.buscarCliente)(conversa.cliente_id).then(c => c || { id: conversa.cliente_id, nome: conversa.nome_perfil });
   const c = await cli;
   const processoId = await criarProcesso({ cliente: c, escritorioId: process.env.ESCRITORIO_ID, triagem });
-  await honorario({ clienteId: c.id, processoId, valorEntrada: ENTRADA(), criadoPor: c.criado_por || null });
+  await honorario({ clienteId: c.id, processoId, valorEntrada: ENTRADA(), diferido, criadoPor: c.criado_por || null });
   const entrevistaId = await criarEntrevista({ cliente: c, processoId, escritorioId: process.env.ESCRITORIO_ID, triagem, historicoTexto: deps.historicoTexto || '' }).catch(e => { console.warn('[captacao] entrevista:', e.message); return null; });
-  await avisar(`NOVO CLIENTE SUPERENDIVIDAMENTO ✅\n${conversa.nome_perfil || conversa.wa_id} (${conversa.wa_id})\nEntrada paga e 3 documentos assinados. Processo criado no IURIA (${processoId}). Gerando a petição; aviso quando a distribuição estiver em rascunho para você revisar.\nResumo: ${triagem.resumo || '-'}`);
+  await avisar(`NOVO CLIENTE SUPERENDIVIDAMENTO ✅\n${conversa.nome_perfil || conversa.wa_id} (${conversa.wa_id})\n${diferido ? 'Entrada combinada para depois da liminar (sem cobrança; cláusula no contrato)' : 'Entrada paga'} e 3 documentos assinados. Processo criado no IURIA (${processoId}). Gerando a petição; aviso quando a distribuição estiver em rascunho para você revisar.\nResumo: ${triagem.resumo || '-'}`);
   // Petição + rascunho de distribuição em segundo plano (a IA leva minutos). Nunca protocola.
   const preparar = deps.preparar || prepararProtocolo;
   preparar({ conversa, cliente: c, processoId, entrevistaId, escritorioId: process.env.ESCRITORIO_ID, historicoTexto: deps.historicoTexto || '' })
     .then(r => avisar(`PETIÇÃO PRONTA PARA REVISÃO — ${c.nome}\nDistribuição em rascunho (${r.distribuicaoId || 'sem id'}) no IURIA. Falta: exportar o PDF da petição, completar CNPJ dos credores e assinar com o A3.${r.viabilidade?.fundamento_resumo ? '\nViabilidade (IA): ' + r.viabilidade.fundamento_resumo : ''}`))
     .catch(e => avisar(`FALHA ao gerar a petição de ${c.nome}: ${e.message}. A entrevista está no IURIA para gerar manualmente.`));
-  return { respostas: [MSG.concluido(conversa.nome_perfil)], patch: { ...patch, etapa: 'cliente', processo_id: processoId } };
+  return { respostas: [MSG.concluido(conversa.nome_perfil, diferido)], patch: { ...patch, etapa: 'cliente', processo_id: processoId } };
 }

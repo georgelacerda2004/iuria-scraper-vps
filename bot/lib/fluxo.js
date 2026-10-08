@@ -1,6 +1,6 @@
 // Fluxo da conversa: recepção → consentimento → triagem por IA → handoff/encerrado.
 import { responder } from './cerebro.js';
-import { receberDocumento, concluirCadastro, verificarConclusao, MSG as CAP } from './captacao.js';
+import { receberDocumento, concluirCadastro, verificarConclusao, pagamentoDiferido, MSG as CAP } from './captacao.js';
 
 const NOME_ROBO = process.env.NOME_ROBO || 'Paula';
 const NOME_ESCRITORIO = process.env.NOME_ESCRITORIO || 'o escritório';
@@ -58,7 +58,7 @@ export async function proximoPasso(conversa, ev, opts = {}) {
     let r = null;
     try { r = await verificarConclusao(conversa, opts.captacao); } catch (e) { console.error('[fluxo] verificarConclusao:', e.message); }
     if (r && r.respostas.length) return r;
-    const pend = { pago: !!(conversa.pago_em || r?.patch?.pago_em), assinados: 0, total: (conversa.triagem?.assinaturas || []).length };
+    const pend = { pago: !!(conversa.pago_em || r?.patch?.pago_em), diferido: pagamentoDiferido(conversa.triagem), assinados: 0, total: (conversa.triagem?.assinaturas || []).length };
     return { respostas: [CAP.aguardando(pend)], patch: r?.patch || {} };
   }
   if (etapa === 'cliente') {
@@ -66,19 +66,27 @@ export async function proximoPasso(conversa, ev, opts = {}) {
     return { respostas: ['Seu caso está com o advogado. Ele responde por aqui em horário comercial. Se for urgente, escreva "falar com advogado".'], patch: {} };
   }
 
-  // triagem: IA conduz.
+  // triagem e proposta: IA conduz.
   if (ev.mediaId && !texto) return { respostas: [MSG.midia], patch: {} };
   const entrada = texto || `[enviou ${ev.tipo}]`;
+  const fase = ['proposta', 'desistiu'].includes(etapa) ? 'proposta' : 'triagem';
   let r;
-  try { r = await ia({ historico, textoAtual: entrada }); }
+  try { r = await ia({ historico, textoAtual: entrada, fase }); }
   catch (e) { console.error('[fluxo] IA falhou:', e.message); return { respostas: [MSG.erroIA], patch: {} }; }
 
   const patch = {};
   if (r.calculo) patch.triagem = { ...(conversa.triagem || {}), calculo: r.calculo };
   const respostas = [r.texto];
-  if (r.triagem) { patch.triagem = { ...(patch.triagem || conversa.triagem || {}), ...r.triagem }; patch.etapa = r.triagem.resultado === 'favoravel' ? 'viavel' : r.triagem.resultado === 'desfavoravel' ? 'inviavel' : 'triagem'; }
+  // Favorável → fase de proposta (a Paula explica o processo e as condições; só depois pede documentos).
+  if (r.triagem) { patch.triagem = { ...(patch.triagem || conversa.triagem || {}), ...r.triagem }; patch.etapa = r.triagem.resultado === 'favoravel' ? 'proposta' : r.triagem.resultado === 'desfavoravel' ? 'inviavel' : 'triagem'; }
+  if (r.proposta?.aceita) {
+    patch.triagem = { ...(patch.triagem || conversa.triagem || {}), pagamento: r.proposta.pagamento, proposta_aceita_em: new Date().toISOString() };
+    patch.etapa = 'docs';
+    respostas.push(CAP.primeiroDoc); // o pedido do RG sai no mesmo turno
+  } else if (r.proposta && !r.proposta.aceita) {
+    patch.triagem = { ...(patch.triagem || conversa.triagem || {}), recusa_motivo: r.proposta.motivo };
+    patch.etapa = 'desistiu';
+  }
   if (r.handoff) { patch.etapa = 'handoff'; patch.handoff_em = new Date().toISOString(); patch.handoff_motivo = r.handoff; }
-  // Favorável: já pede o primeiro documento no mesmo turno, sem esperar a pessoa escrever de novo.
-  if (patch.etapa === 'viavel') { respostas.push(CAP.primeiroDoc); patch.etapa = 'docs'; }
   return { respostas, patch, usage: r.usage };
 }

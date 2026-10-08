@@ -120,12 +120,13 @@ export async function criarEntrevista({ cliente, processoId, escritorioId, triag
   return data.id;
 }
 
-export async function registrarHonorario({ clienteId, processoId, valorEntrada, criadoPor }) {
+// Valores de tipo/status seguem os CHECKs da tabela honorarios do IURIA ('Contratual', 'Recebido' | 'A receber').
+export async function registrarHonorario({ clienteId, processoId, valorEntrada, diferido = false, criadoPor }) {
   const s = db();
   const { error } = await s.from('honorarios').insert({
-    cliente_id: clienteId, processo_id: processoId, tipo: 'contratual', valor_total: valorEntrada, num_parcelas: 1,
-    forma_pagamento: 'Asaas', status: 'pago', data_acordo: new Date().toISOString().slice(0, 10),
-    observacao: 'Entrada paga via robô WhatsApp (Asaas).', criado_por: criadoPor,
+    cliente_id: clienteId, processo_id: processoId, tipo: 'Contratual', valor_total: valorEntrada, num_parcelas: 1,
+    forma_pagamento: diferido ? 'A combinar (após liminar)' : 'Asaas', status: diferido ? 'A receber' : 'Recebido', data_acordo: new Date().toISOString().slice(0, 10),
+    observacao: diferido ? 'Entrada combinada para até 10 dias após a liminar (cláusula 2ª do contrato). Contratação pelo robô WhatsApp.' : 'Entrada paga via robô WhatsApp (Asaas).', criado_por: criadoPor,
   });
   if (error) console.warn('[iuria] registrarHonorario:', error.message);
 }

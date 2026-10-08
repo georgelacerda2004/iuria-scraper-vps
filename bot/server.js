@@ -18,7 +18,7 @@ const faltando = ['WHATSAPP_TOKEN', 'PHONE_NUMBER_ID', 'META_APP_SECRET', 'SUPAB
 if (faltando.length) console.warn('[bot] variáveis ainda não preenchidas:', faltando.join(', '));
 // Diagnóstico: só os NOMES das variáveis opcionais ausentes (nunca valores), para conferir o painel do Render pelo log.
 const OPCIONAIS = ['WABA_ID', 'WEBHOOK_VERIFY_TOKEN', 'SUPABASE_URL', 'CLAUDE_MODEL', 'NOME_ROBO', 'NOME_ESCRITORIO', 'ESCRITORIO_ID',
-  'ADVOGADO_NOME', 'ADVOGADO_OAB', 'RESPONSAVEL_NOME', 'ESCRITORIO_ENDERECO', 'FORO_CONTRATO', 'TRIBUNAL_PADRAO', 'HONORARIOS_ENTRADA',
+  'ADVOGADO_NOME', 'ADVOGADO_OAB', 'RESPONSAVEL_NOME', 'ESCRITORIO_ENDERECO', 'FORO_CONTRATO', 'TRIBUNAL_PADRAO', 'HONORARIOS_ENTRADA', 'HONORARIOS_EXITO_PCT',
   'ASAAS_BASE_URL', 'ASAAS_WEBHOOK_TOKEN', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'META_ADS_TOKEN', 'META_AD_ACCOUNT_ID', 'META_PAGE_ID',
   'SISTEMA_PADRAO', 'CAMPANHA_AUTOPAUSAR', 'OPERADOR_WHATSAPP', 'NODE_VERSION'];
 const ausentes = OPCIONAIS.filter(k => !process.env[k]);
@@ -171,7 +171,12 @@ async function rodarCampanha() {
   if (r.feitas.length || (horaSP >= 8 && ultimoRelatorioDia !== hojeSP)) { await avisarOperador(r.relatorio); ultimoRelatorioDia = hojeSP; }
   else console.log('[campanha]\n' + r.relatorio);
 }
-if (process.env.NODE_ENV !== 'test') { setTimeout(() => rodarCampanha().catch(e => console.error('[campanha]', e.message)), 60_000); setInterval(() => rodarCampanha().catch(e => console.error('[campanha]', e.message)), 4 * 3600_000); }
+// Uma falha de rede (ex.: logo após o boot) tenta de novo em 3 min, uma vez.
+async function rodarCampanhaComRetry(tentativa = 0) {
+  try { await rodarCampanha(); }
+  catch (e) { console.error('[campanha]', e.message); if (tentativa < 1) setTimeout(() => rodarCampanhaComRetry(tentativa + 1), 3 * 60_000); }
+}
+if (process.env.NODE_ENV !== 'test') { setTimeout(() => rodarCampanhaComRetry(), 60_000); setInterval(() => rodarCampanhaComRetry(), 4 * 3600_000); }
 
 async function tratarMensagem(ev) {
   const conversa = await upsertConversa({ waId: ev.waId, nome: ev.nome, referral: ev.referral });

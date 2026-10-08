@@ -41,6 +41,8 @@ services:
         sync: false
       - key: HONORARIOS_ENTRADA
         value: "500"
+      - key: HONORARIOS_EXITO_PCT
+        value: "30"
       - key: ASAAS_API_KEY
         sync: false
       - key: ASAAS_BASE_URL
