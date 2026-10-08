@@ -1,6 +1,7 @@
 // Fluxo da conversa: recepção → consentimento → triagem por IA → handoff/encerrado.
 import { responder } from './cerebro.js';
-import { receberDocumento, concluirCadastro, verificarConclusao, pagamentoDiferido, MSG as CAP } from './captacao.js';
+import { receberDocumento, concluirCadastro, verificarConclusao, pagamentoDiferido, modoEntrada, MSG as CAP } from './captacao.js';
+import { resumoProcesso } from './iuria.js';
 
 const NOME_ROBO = process.env.NOME_ROBO || 'Paula';
 const NOME_ESCRITORIO = process.env.NOME_ESCRITORIO || 'o escritório';
@@ -58,12 +59,20 @@ export async function proximoPasso(conversa, ev, opts = {}) {
     let r = null;
     try { r = await verificarConclusao(conversa, opts.captacao); } catch (e) { console.error('[fluxo] verificarConclusao:', e.message); }
     if (r && r.respostas.length) return r;
-    const pend = { pago: !!(conversa.pago_em || r?.patch?.pago_em), diferido: pagamentoDiferido(conversa.triagem), assinados: 0, total: (conversa.triagem?.assinaturas || []).length };
+    const pend = { pago: !!(conversa.pago_em || r?.patch?.pago_em), diferido: pagamentoDiferido(conversa.triagem), modo: modoEntrada(conversa.triagem), assinados: 0, total: (conversa.triagem?.assinaturas || []).length };
     return { respostas: [CAP.aguardando(pend)], patch: r?.patch || {} };
   }
   if (etapa === 'cliente') {
-    if (ev.mediaId) return { respostas: ['Recebi, guardei na sua pasta. O advogado já tem acesso.'], patch: {} };
-    return { respostas: ['Seu caso está com o advogado. Ele responde por aqui em horário comercial. Se for urgente, escreva "falar com advogado".'], patch: {} };
+    if (ev.mediaId && !texto) return { respostas: ['Recebi, guardei na sua pasta. O advogado já tem acesso.'], patch: {} };
+    // Pós-contratação: a Paula responde com os dados do processo (número, status, últimos andamentos).
+    let contexto = '';
+    try { contexto = await (opts.resumoProcesso || resumoProcesso)(conversa.processo_id); } catch (e) { console.warn('[fluxo] resumoProcesso:', e.message); }
+    let r;
+    try { r = await ia({ historico, textoAtual: texto, fase: 'pos', contexto }); }
+    catch (e) { console.error('[fluxo] IA (pos) falhou:', e.message); return { respostas: ['Seu caso está com o advogado. Ele responde por aqui em horário comercial. Se for urgente, escreva "falar com advogado".'], patch: {} }; }
+    const patch = {};
+    if (r.handoff) { patch.etapa = 'handoff'; patch.handoff_em = new Date().toISOString(); patch.handoff_motivo = r.handoff; }
+    return { respostas: [r.texto], patch, usage: r.usage };
   }
 
   // triagem e proposta: IA conduz.

@@ -121,12 +121,16 @@ export async function criarEntrevista({ cliente, processoId, escritorioId, triag
 }
 
 // Valores de tipo/status seguem os CHECKs da tabela honorarios do IURIA ('Contratual', 'Recebido' | 'A receber').
-export async function registrarHonorario({ clienteId, processoId, valorEntrada, diferido = false, criadoPor }) {
+export async function registrarHonorario({ clienteId, processoId, valorEntrada, diferido = false, modo = diferido ? 'apos_liminar' : 'agora', criadoPor }) {
   const s = db();
+  const pct = Number(process.env.HONORARIOS_ADEXITUM_PCT || process.env.HONORARIOS_EXITO_PCT || 30);
+  const linha = modo === 'ad_exitum'
+    ? { tipo: 'Ad exitum', valor_total: 0, forma_pagamento: 'Ao final (êxito)', status: 'A receber', observacao: `Contrato ad exitum: sem entrada; ${pct}% sobre o proveito econômico ao final. Contratação pelo robô WhatsApp.` }
+    : modo === 'apos_liminar'
+    ? { tipo: 'Contratual', valor_total: valorEntrada, forma_pagamento: 'A combinar (após liminar)', status: 'A receber', observacao: 'Entrada combinada para até 10 dias após a liminar (cláusula 2ª do contrato). Contratação pelo robô WhatsApp.' }
+    : { tipo: 'Contratual', valor_total: valorEntrada, forma_pagamento: 'Asaas', status: 'Recebido', observacao: 'Entrada paga via robô WhatsApp (Asaas).' };
   const { error } = await s.from('honorarios').insert({
-    cliente_id: clienteId, processo_id: processoId, tipo: 'Contratual', valor_total: valorEntrada, num_parcelas: 1,
-    forma_pagamento: diferido ? 'A combinar (após liminar)' : 'Asaas', status: diferido ? 'A receber' : 'Recebido', data_acordo: new Date().toISOString().slice(0, 10),
-    observacao: diferido ? 'Entrada combinada para até 10 dias após a liminar (cláusula 2ª do contrato). Contratação pelo robô WhatsApp.' : 'Entrada paga via robô WhatsApp (Asaas).', criado_por: criadoPor,
+    cliente_id: clienteId, processo_id: processoId, num_parcelas: 1, data_acordo: new Date().toISOString().slice(0, 10), criado_por: criadoPor, ...linha,
   });
   if (error) console.warn('[iuria] registrarHonorario:', error.message);
 }
@@ -154,4 +158,37 @@ export async function avisarOperador(texto) {
   try {
     await fetch(`https://api.telegram.org/bot${tk}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text: texto }) });
   } catch (e) { console.warn('[aviso] telegram falhou:', e.message); }
+}
+
+// Pós-contratação: número, status e últimos andamentos em texto, para a Paula responder "como está meu processo".
+export async function resumoProcesso(processoId) {
+  const s = db();
+  if (!s || !processoId) return '';
+  const { data: p } = await s.from('processos').select('numero,status_processo,fase,tribunal,vara,comarca,data_distribuicao').eq('id', processoId).maybeSingle();
+  if (!p) return '';
+  const { data: and } = await s.from('andamentos').select('data,tipo,descricao').eq('processo_id', processoId).order('data', { ascending: false }).limit(5);
+  const l = [
+    `Número do processo: ${p.numero || 'ainda não protocolado (petição em preparação pelo advogado)'}`,
+    `Status: ${p.status_processo || '-'}${p.fase ? ' · fase ' + p.fase : ''}`,
+    `Tribunal/vara: ${[p.tribunal, p.vara, p.comarca].filter(Boolean).join(' · ') || '-'}`,
+    p.data_distribuicao ? `Distribuído em: ${p.data_distribuicao}` : '',
+    p.numero ? `Consulta pública: ${linkConsulta(p)}` : '',
+    (and || []).length ? 'Últimos andamentos:\n' + and.map(a => `- ${a.data || ''} ${a.tipo || ''}: ${(a.descricao || '').slice(0, 200)}`).join('\n') : 'Sem andamentos registrados ainda.',
+  ].filter(Boolean);
+  return l.join('\n');
+}
+
+export function linkConsulta(p) {
+  if (process.env.LINK_CONSULTA_PROCESSO) return process.env.LINK_CONSULTA_PROCESSO;
+  return (p?.tribunal || 'TJSP').toUpperCase().includes('TJSP') ? 'https://esaj.tjsp.jus.br/cpopg/open.do' : 'https://www.cnj.jus.br/consulta-processual-unificada/';
+}
+
+// Andamentos criados depois de `desde` (ISO), mais antigos primeiro.
+export async function andamentosDesde(processoId, desde) {
+  const s = db();
+  if (!s || !processoId) return [];
+  let q = s.from('andamentos').select('id,data,tipo,descricao,created_at').eq('processo_id', processoId).order('created_at', { ascending: true }).limit(5);
+  if (desde) q = q.gt('created_at', desde);
+  const { data } = await q;
+  return data || [];
 }

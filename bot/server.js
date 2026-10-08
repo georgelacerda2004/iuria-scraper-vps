@@ -11,6 +11,9 @@ import { db } from './lib/db.js';
 import { ciclo as cicloCampanha } from './lib/campanha.js';
 import { avisarOperador } from './lib/iuria.js';
 import { montarBriefing } from './lib/briefing.js';
+import { rodar as rodarFollowups } from './lib/followup.js';
+import { rodar as rodarPos } from './lib/pos.js';
+import { sincronizar as sincronizarTemplates } from './lib/templates.js';
 
 // Variáveis ainda não preenchidas no Render vêm como "PREENCHER": tratar como ausentes.
 for (const [k, v] of Object.entries(process.env)) if (v === 'PREENCHER') delete process.env[k];
@@ -20,7 +23,7 @@ if (faltando.length) console.warn('[bot] variáveis ainda não preenchidas:', fa
 const OPCIONAIS = ['WABA_ID', 'WEBHOOK_VERIFY_TOKEN', 'SUPABASE_URL', 'CLAUDE_MODEL', 'NOME_ROBO', 'NOME_ESCRITORIO', 'ESCRITORIO_ID',
   'ADVOGADO_NOME', 'ADVOGADO_OAB', 'RESPONSAVEL_NOME', 'ESCRITORIO_ENDERECO', 'FORO_CONTRATO', 'TRIBUNAL_PADRAO', 'HONORARIOS_ENTRADA', 'HONORARIOS_EXITO_PCT',
   'ASAAS_BASE_URL', 'ASAAS_WEBHOOK_TOKEN', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'META_ADS_TOKEN', 'META_AD_ACCOUNT_ID', 'META_PAGE_ID',
-  'SISTEMA_PADRAO', 'CAMPANHA_AUTOPAUSAR', 'OPERADOR_WHATSAPP', 'NODE_VERSION'];
+  'SISTEMA_PADRAO', 'CAMPANHA_AUTOPAUSAR', 'OPERADOR_WHATSAPP', 'NODE_VERSION', 'HONORARIOS_ADEXITUM_PCT', 'WABA_ID_PROD', 'LINK_CONSULTA_PROCESSO', 'WHATSAPP_TEMPLATES'];
 const ausentes = OPCIONAIS.filter(k => !process.env[k]);
 console.log('[bot] variáveis opcionais ausentes (padrão interno ou recurso desligado):', ausentes.length ? ausentes.join(', ') : 'nenhuma');
 
@@ -158,6 +161,16 @@ async function recuperarCadastros() {
   }
 }
 if (process.env.NODE_ENV !== 'test') setInterval(() => verificarPendencias().catch(() => {}), 3 * 60_000);
+
+// SDR (follow-ups a cada 10 min), pós (protocolo e andamentos a cada 15 min) e templates do WhatsApp (boot + 1x/dia).
+if (process.env.NODE_ENV !== 'test') {
+  setInterval(() => rodarFollowups().then(n => n && console.log(`[followup] ${n} retomada(s) enviada(s)`)).catch(e => console.error('[followup]', e.message)), 10 * 60_000);
+  setInterval(() => rodarPos().then(r => (r.protocolos || r.andamentos) && console.log(`[pos] ${r.protocolos} protocolo(s), ${r.andamentos} andamento(s) avisados`)).catch(e => console.error('[pos]', e.message)), 15 * 60_000);
+  if (process.env.WHATSAPP_TEMPLATES !== 'off') {
+    setTimeout(() => sincronizarTemplates().catch(e => console.error('[templates]', e.message)), 30_000);
+    setInterval(() => sincronizarTemplates().catch(e => console.error('[templates]', e.message)), 24 * 3600_000);
+  }
+}
 
 // Robô de campanha: a cada 4 h lê o Meta, cruza com o CRM e (se CAMPANHA_AUTOPAUSAR=on) pausa o que estourou o teto.
 // Relatório vai ao Telegram 1x por dia, às 8h de Brasília.

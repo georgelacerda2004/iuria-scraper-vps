@@ -64,6 +64,8 @@ export async function gerarProcuracao(c) {
 
 export async function gerarContrato(c, triagem = {}) {
   const diferido = triagem.pagamento === 'apos_liminar';
+  const adExitum = triagem.pagamento === 'ad_exitum';
+  const ADEX = Number(process.env.HONORARIOS_ADEXITUM_PCT || EXITO_PCT());
   const a = ADV(); const { doc, done } = novoDoc();
   titulo(doc, 'Contrato de Prestação de Serviços Advocatícios');
   sub(doc, 'Contratante'); par(doc, qualificacao(c) + '.');
@@ -72,7 +74,9 @@ export async function gerarContrato(c, triagem = {}) {
   sub(doc, 'Cláusula 1ª — Objeto');
   par(doc, 'O(A) CONTRATADO(A) prestará ao(à) CONTRATANTE os serviços de análise jurídica da situação de superendividamento, elaboração do plano de pagamento e propositura e acompanhamento do processo de repactuação de dívidas previsto nos arts. 104-A a 104-C do Código de Defesa do Consumidor (Lei 14.181/2021), incluída a fase de conciliação, e, se necessário, o pedido de plano judicial compulsório, até decisão final em primeira instância.');
   sub(doc, 'Cláusula 2ª — Honorários');
-  par(doc, diferido
+  par(doc, adExitum
+    ? `Pelos serviços, considerando a situação financeira declarada, as partes ajustam que não haverá entrada nem qualquer pagamento antecipado. O(A) CONTRATANTE pagará ao(à) CONTRATADO(A) exclusivamente honorários de êxito (ad exitum) de ${ADEX}% (${porExtenso(ADEX)} por cento) sobre o proveito econômico efetivamente obtido (redução do valor das parcelas, dos juros ou do saldo das dívidas, apurada pela diferença entre o que era exigido e o que ficou definido em acordo ou decisão), devidos somente ao final do processo e somente em caso de resultado favorável. Não havendo proveito econômico, nada será devido a título de honorários contratuais.`
+    : diferido
     ? `Pelos serviços, o(a) CONTRATANTE pagará ao(à) CONTRATADO(A), a título de entrada, o valor de ${brl(ENTRADA())}. Considerando a situação financeira declarada, as partes ajustam que a entrada será devida em até 10 (dez) dias após a intimação da decisão que deferir, ainda que em parte, a tutela de urgência (liminar) requerida na ação; não sendo deferida, as partes ajustarão por escrito nova data, sem prejuízo da continuidade dos serviços. Quanto ao restante: ${RESTANTE()}.`
     : `Pelos serviços, o(a) CONTRATANTE pagará ao(à) CONTRATADO(A), a título de entrada, o valor de ${brl(ENTRADA())}, por meio de cobrança eletrônica, no ato da contratação. Quanto ao restante: ${RESTANTE()}.`);
   par(doc, 'Os honorários de sucumbência eventualmente fixados pertencem ao(à) CONTRATADO(A), nos termos do art. 23 da Lei 8.906/1994, sem compensação com os honorários contratuais.');

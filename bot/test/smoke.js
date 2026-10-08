@@ -270,3 +270,64 @@ console.log('smoke ok (peticao + campanha)');
   for (const trecho of ['+55 14 99642-6132', 'wa.me/5514996426132', 'R$ 760,00', '78.9%', 'Pensionista.', 'Jane: Oi', 'pediu humano']) if (!b.includes(trecho)) throw new Error('briefing sem: ' + trecho);
   console.log('smoke ok (briefing)');
 }
+
+// --- closer: escada (após liminar → ad exitum), contrato ad exitum, honorário ---
+{
+  const { gerarTodos } = await import('../lib/documentos.js');
+  const { concluirCadastro, modoEntrada } = await import('../lib/captacao.js');
+  assert.equal(modoEntrada({ pagamento: 'ad_exitum' }), 'ad_exitum'); assert.equal(modoEntrada({}), 'agora');
+  const base = { id: 'cli-1', nome: 'Maria Silva Souza', cpf: '123.456.789-09', rg: '1', endereco: 'Rua A', bairro: 'B', cidade: 'São Paulo', uf: 'SP', cep: '0', criado_por: 'u1' };
+  const tri = { resumo: 'ok', fonte_renda: 'clt', calculo: { renda_liquida: 1000, parcelas_mensais_consideradas: 500, percentual_renda_comprometido: 50, sobra_mensal: 0, minimo_existencial: 600 }, dividas: [] };
+  const [a, b, c] = await Promise.all([gerarTodos(base, tri), gerarTodos(base, { ...tri, pagamento: 'apos_liminar' }), gerarTodos(base, { ...tri, pagamento: 'ad_exitum' })]);
+  assert.ok(new Set([a[1].pdf.length, b[1].pdf.length, c[1].pdf.length]).size === 3, 'os 3 contratos devem diferir');
+  let cobrou = false, hon = null;
+  const cc = await concluirCadastro({ id: 'c9', wa_id: '5511', nome_perfil: 'Maria', triagem: { ...tri, pagamento: 'ad_exitum', dados: { cpf: '12345678909' }, documentos: {} } }, {
+    criarCliente: async () => base, registrarDoc: async () => {}, asaasCliente: async () => { cobrou = true; }, asaasCobranca: async () => { cobrou = true; },
+    enviar: async ({ tipoDoc }) => ({ autentiqueId: 'a_' + tipoDoc, link: 'https://autentique/' + tipoDoc }),
+  });
+  assert.equal(cobrou, false); assert.match(cc.respostas[0], /não há entrada/);
+  const { verificarConclusao } = await import('../lib/captacao.js');
+  const v = await verificarConclusao({ ...{ id: 'c9', wa_id: '5511', nome_perfil: 'Maria' }, ...cc.patch }, { consultarPagamento: async () => { throw new Error('não'); }, statusAss: async (ids) => ids.map(id => ({ autentique_id: id, status: 'assinado' })), buscarCliente: async () => base, criarProcesso: async () => 'p9', criarEntrevista: async () => 'e9', honorario: async (h) => { hon = h; }, avisar: async () => {}, preparar: async () => ({}) });
+  assert.equal(v.patch.etapa, 'cliente'); assert.equal(hon.modo, 'ad_exitum');
+  // roteiro da proposta menciona os três degraus e as regras
+  const { responder } = await import('../lib/cerebro.js');
+  let sys = null;
+  await responder({ historico: [], textoAtual: 'x', fase: 'proposta', api: { beta: { messages: { create: async (req) => { sys = req.system[1].text; return { stop_reason: 'end_turn', usage: {}, content: [{ type: 'text', text: 'ok' }] }; } } } } });
+  for (const t of ['apos_liminar', 'ad_exitum', 'Custo de não agir', 'urgência falsa']) assert.ok(sys.includes(t), 'roteiro sem ' + t);
+  console.log('smoke ok (closer)');
+}
+
+// --- SDR: follow-ups ---
+{
+  const fu = await import('../lib/followup.js');
+  const { dentroDaJanela, enviar } = await import('../lib/whatsapp.js');
+  assert.equal(fu.AGENDA.length, 3);
+  assert.ok(dentroDaJanela(new Date(Date.now() - 3600_000).toISOString())); assert.ok(!dentroDaJanela(new Date(Date.now() - 25 * 3600_000).toISOString())); assert.ok(!dentroDaJanela(null));
+  assert.match(fu.textoFixo({ etapa: 'consentimento', nome_perfil: 'Ana Lima' }), /^Oi, Ana!.*Responda \*SIM\*/s);
+  assert.match(fu.textoFixo({ etapa: 'docs', nome_perfil: 'Ana', triagem: { documentos: { pessoal: {} } } }), /comprovante de endereço/);
+  assert.match(fu.textoFixo({ etapa: 'pagamento_assinatura', nome_perfil: 'Ana', triagem: { assinaturas: [{ nome: 'Contrato', link: 'https://x/1' }], cobranca: { url: 'https://pay' } } }), /https:\/\/x\/1[\s\S]*https:\/\/pay/);
+  assert.doesNotMatch(fu.textoFixo({ etapa: 'pagamento_assinatura', nome_perfil: 'Ana', triagem: { pagamento: 'ad_exitum', assinaturas: [], cobranca: { url: 'https://pay' } } }), /https:\/\/pay/);
+  let faseVista = null;
+  const t = await fu.montarTexto({ id: 'c1', etapa: 'proposta', nome_perfil: 'Ana' }, { historico: async () => [], ia: async ({ fase }) => { faseVista = fase; return { texto: 'Oi Ana, ficou no meio...' }; } });
+  assert.equal(faseVista, 'retomada'); assert.match(t, /ficou no meio/);
+  assert.equal(fu.pendenciaCurta({ etapa: 'docs', triagem: { documentos: { pessoal: {}, endereco: {} } } }), 'o comprovante de renda');
+  assert.equal(typeof fu.horaComercial(), 'boolean');
+  // enviar: fora da janela sem template aprovado → null; com template → via template
+  const r0 = await enviar({ to: '1', texto: 'x', ultimaEntradaEm: null, template: 'se_retomada', params: ['Ana'], templateDisponivel: async () => false });
+  assert.equal(r0, null);
+  console.log('smoke ok (followup)');
+}
+
+// --- pós: protocolo e andamento; fluxo cliente usa a IA com contexto ---
+{
+  const pos = await import('../lib/pos.js');
+  const p = { numero: '1000000-00.2026.8.26.0100', tribunal: 'TJSP', vara: '1ª Vara Cível', comarca: 'Guarulhos' };
+  assert.match(pos.textoProtocolo({ nome_perfil: 'Ana Lima' }, p), /Ana, boa notícia[\s\S]*1000000-00\.2026\.8\.26\.0100[\s\S]*esaj\.tjsp/);
+  assert.match(pos.textoAndamento({ nome_perfil: 'Ana' }, p, { data: '2026-10-20', tipo: 'Decisão', descricao: 'Defiro a tutela' }), /Decisão: Defiro a tutela/);
+  let ctx = null, fase = null;
+  const f = await proximoPasso({ etapa: 'cliente', processo_id: 'p1', nome_perfil: 'Ana' }, { texto: 'como está meu processo?' }, { resumoProcesso: async () => 'Número do processo: 123', ia: async (a) => { ctx = a.contexto; fase = a.fase; return { texto: 'Está assim...' }; } });
+  assert.equal(fase, 'pos'); assert.match(ctx, /123/); assert.equal(f.respostas[0], 'Está assim...');
+  const { definicoes } = await import('../lib/templates.js');
+  assert.deepEqual(Object.keys(definicoes()), ['se_retomada', 'se_processo_protocolado', 'se_andamento', 'se_pendencia']);
+  console.log('smoke ok (pos)');
+}

@@ -16,7 +16,8 @@ export function db() {
 export async function upsertConversa({ waId, nome, referral }) {
   const s = db();
   if (!s) return { id: null, wa_id: waId, etapa: 'novo' };
-  const patch = { wa_id: waId, nome_perfil: nome ?? null, ultima_msg_em: new Date().toISOString() };
+  const agora = new Date().toISOString();
+  const patch = { wa_id: waId, nome_perfil: nome ?? null, ultima_msg_em: agora, ultima_entrada_em: agora, followup_n: 0 };
   if (referral) {
     patch.origem = 'ads_whatsapp';
     patch.ad_id = referral.source_id ?? null;
