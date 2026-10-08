@@ -2,16 +2,17 @@
 import { responder } from './cerebro.js';
 import { receberDocumento, concluirCadastro, verificarConclusao, MSG as CAP } from './captacao.js';
 
-const NOME_ROBO = process.env.NOME_ROBO || 'assistente virtual do escritório';
+const NOME_ROBO = process.env.NOME_ROBO || 'Paula';
+const NOME_ESCRITORIO = process.env.NOME_ESCRITORIO || 'o escritório';
 
 export const MSG = {
   boasVindas: (nome) =>
-    `Olá${nome ? `, ${nome.split(' ')[0]}` : ''}! Eu sou o ${NOME_ROBO}. Sou um robô, não um advogado, e estou aqui para tirar dúvidas sobre a Lei do Superendividamento (Lei 14.181/2021) e entender a sua situação antes de passar para a equipe.\n\n` +
-    `Para continuar, preciso guardar as informações que você me enviar de forma segura, só para essa análise. Você concorda? Responda *SIM* para seguir ou *SAIR* para encerrar.`,
+    `Oi${nome ? `, ${nome.split(' ')[0]}` : ''}! Aqui é a ${NOME_ROBO}, da ${NOME_ESCRITORIO}. Eu faço o primeiro atendimento sobre a Lei do Superendividamento (Lei 14.181/2021): entendo a sua situação e levo tudo para o advogado responsável.\n\n` +
+    `Esse atendimento inicial é automático e as suas informações ficam guardadas de forma segura, só para a análise. Posso seguir? Responda *SIM* para continuar ou *SAIR* para encerrar.`,
   consentimentoOk:
     `Obrigado! Vamos lá. Me conta com suas palavras: quais dívidas você tem hoje (cartão, empréstimo, consignado, cheque especial...) e quanto sai por mês, mais ou menos?`,
   sair: `Tudo bem, encerrei por aqui e não guardei nada. Se quiser retomar, é só mandar uma mensagem.`,
-  handoff: `Entendi. Vou passar a sua conversa para a equipe do escritório. Um advogado continua daqui em horário comercial.`,
+  handoff: `Entendi. Vou passar a sua conversa para a equipe. Um advogado continua daqui em horário comercial.`,
   midia: `Recebi o arquivo, obrigado! Nesta primeira conversa não preciso de documentos ainda. Me responde por texto, por favor.`,
   erroIA: `Tive um problema aqui do meu lado. Pode repetir a última mensagem?`,
 };

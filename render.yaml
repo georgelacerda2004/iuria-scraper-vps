@@ -30,7 +30,7 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: NOME_ROBO
-        value: assistente virtual do escritório
+        value: Paula
       - key: NOME_ESCRITORIO
         value: o escritório
       - key: ESCRITORIO_ID
