@@ -212,3 +212,17 @@ console.log('smoke ok (peticao + campanha)');
   if (!m || !['off', 'manual', 'auto'].includes(m[1])) throw new Error('aviso_whatsapp fora de off|manual|auto');
   console.log('smoke ok (aviso_whatsapp)');
 }
+
+// CPF por texto quando o OCR não leu.
+{
+  const { cpfValido, receberDocumento, MSG: CAPM } = await import('../lib/captacao.js');
+  if (!cpfValido('529.982.247-25') || cpfValido('111.111.111-11') || cpfValido('123')) throw new Error('cpfValido errado');
+  const docs = { pessoal: { path: 'a' }, endereco: { path: 'b' }, renda: { path: 'c' } };
+  let r = await receberDocumento({ id: 'x', triagem: { dados: { nome: 'Teste' }, documentos: docs } }, { texto: 'oi' });
+  if (r.acao || r.respostas[0] !== CAPM.pedirCpf) throw new Error('deveria pedir CPF');
+  r = await receberDocumento({ id: 'x', triagem: { dados: { nome: 'Teste' }, documentos: docs } }, { texto: 'meu cpf é 529.982.247-25' });
+  if (r.acao !== 'concluir' || r.patch.triagem.dados.cpf !== '52998224725') throw new Error('deveria concluir com o CPF informado');
+  r = await receberDocumento({ id: 'x', triagem: { dados: { cpf: '52998224725' }, documentos: docs } }, { texto: 'qualquer' });
+  if (r.acao !== 'concluir') throw new Error('com CPF válido deveria concluir direto');
+  console.log('smoke ok (cpf por texto)');
+}

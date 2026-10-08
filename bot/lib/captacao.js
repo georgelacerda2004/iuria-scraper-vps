@@ -13,12 +13,21 @@ const SLOTS = [
   { slot: 'renda', pede: 'Perfeito. Por último, um *comprovante de renda*: holerite, extrato do INSS ou extrato bancário dos últimos 3 meses.', aceita: /renda|holerite|extrato|imposto|ctps/i },
 ];
 const ENTRADA = () => Number(process.env.HONORARIOS_ENTRADA || 500);
+const soDigitos = v => String(v || '').replace(/\D/g, '');
+// CPF: 11 dígitos, não repetidos, com os dois dígitos verificadores corretos.
+export function cpfValido(v) {
+  const d = soDigitos(v);
+  if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+  const dv = (n) => { let soma = 0; for (let i = 0; i < n; i++) soma += Number(d[i]) * (n + 1 - i); const r = (soma * 10) % 11; return r === 10 ? 0 : r; };
+  return dv(9) === Number(d[9]) && dv(10) === Number(d[10]);
+}
 
 export const MSG = {
   inicioDocs: (nome) => `${nome ? nome.split(' ')[0] + ', p' : 'P'}elo que você me contou, sua situação tem sinais de se enquadrar na Lei do Superendividamento. Quem confirma isso é o advogado, e para ele analisar preciso de 3 documentos. Vamos um de cada vez.\n\n` + SLOTS[0].pede,
   naoEhDoc: (esperado) => `Esse arquivo não parece ser ${esperado}. Pode conferir e mandar de novo? Se preferir, escreva "pular" que a equipe pede depois.`,
   semArquivo: (pede) => `Preciso do arquivo (foto ou PDF) para seguir. ${pede}`,
   processando: 'Recebi os 3 documentos, obrigado! Estou preparando o seu cadastro e os documentos para assinatura. Leva um minutinho.',
+  pedirCpf: 'Recebi os documentos, obrigado! Só não consegui ler o seu *CPF* na foto. Me manda o número do CPF (só os dígitos) para eu finalizar o cadastro.',
   linksEnvio: ({ valor, urlPagamento, docs }) =>
     `Pronto! Para seguir com o seu caso, são dois passos:\n\n` +
     `1) *Entrada dos honorários* (R$ ${valor.toFixed(2).replace('.', ',')}), por Pix, boleto ou cartão:\n${urlPagamento}\n\n` +
@@ -39,13 +48,21 @@ export async function receberDocumento(conversa, ev, deps = {}) {
   const { baixar = downloadMedia, guardar = iuria.guardarArquivo, classificar = iuria.classificarDoc } = deps;
   const triagem = conversa.triagem || {};
   const atual = slotAtual(triagem);
-  if (!atual) return { respostas: [], patch: {}, acao: 'concluir' };
+  if (!atual) {
+    // Documentos completos: falta só o CPF (OCR não leu). Aceita o número por texto.
+    const d = { ...(triagem.dados || {}) };
+    if (cpfValido(d.cpf)) return { respostas: [], patch: {}, acao: 'concluir' };
+    const digs = soDigitos(ev.texto);
+    if (!ev.mediaId && cpfValido(digs)) return { respostas: [MSG.processando], patch: { triagem: { ...triagem, dados: { ...d, cpf: digs } } }, acao: 'concluir' };
+    return { respostas: [MSG.pedirCpf], patch: {} };
+  }
 
   const texto = (ev.texto || '').trim();
   if (!ev.mediaId) {
     if (/^pular$/i.test(texto)) {
       const docs = { ...(triagem.documentos || {}), [atual.slot]: { pulado: true } };
       const prox = slotAtual({ documentos: docs });
+      if (!prox && !cpfValido(triagem.dados?.cpf)) return { respostas: [MSG.pedirCpf], patch: { triagem: { ...triagem, documentos: docs } } };
       return { respostas: [prox ? prox.pede : MSG.processando], patch: { triagem: { ...triagem, documentos: docs } }, acao: prox ? null : 'concluir' };
     }
     return { respostas: [MSG.semArquivo(atual.pede)], patch: {} };
@@ -66,6 +83,7 @@ export async function receberDocumento(conversa, ev, deps = {}) {
   const prox = slotAtual({ documentos: docs });
   const patch = { triagem: { ...triagem, dados, documentos: docs } };
   if (prox) return { respostas: [prox.pede], patch };
+  if (!cpfValido(dados.cpf)) return { respostas: [MSG.pedirCpf], patch };
   return { respostas: [MSG.processando], patch, acao: 'concluir' };
 }
 

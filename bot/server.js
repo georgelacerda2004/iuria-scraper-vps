@@ -5,7 +5,7 @@ import { assinaturaValida, extrairEventos } from './lib/webhook.js';
 import { sendText, markRead } from './lib/whatsapp.js';
 import { upsertConversa, gravarMensagem, atualizarConversa, carregarHistorico } from './lib/db.js';
 import { proximoPasso } from './lib/fluxo.js';
-import { verificarConclusao, concluirCadastro } from './lib/captacao.js';
+import { verificarConclusao, concluirCadastro, cpfValido, MSG as CAP } from './lib/captacao.js';
 import { EVENTOS_PAGO } from './lib/asaas.js';
 import { db } from './lib/db.js';
 import { ciclo as cicloCampanha } from './lib/campanha.js';
@@ -116,6 +116,14 @@ async function recuperarCadastros() {
     if (!SLOTS_DOCS.every(k => docs[k]?.path)) continue;
     const tentativas = Number(c.triagem?.recuperacao_tentativas || 0);
     if (tentativas >= 3) continue;
+    if (!cpfValido(c.triagem?.dados?.cpf)) {
+      // Sem CPF não há cobrança nem cadastro: devolve a conversa para 'docs' e pede o número por texto.
+      const out = await sendText(c.wa_id, CAP.pedirCpf);
+      await gravarMensagem({ conversaId: c.id, waId: c.wa_id, direcao: 'out', tipo: 'text', texto: CAP.pedirCpf, waMessageId: out?.messages?.[0]?.id });
+      await atualizarConversa(c.id, { etapa: 'docs', handoff_em: null, handoff_motivo: null });
+      console.log('[recuperacao] CPF ausente, pedido por texto:', c.wa_id);
+      continue;
+    }
     try {
       const r = await concluirCadastro(c);
       for (const texto of r.respostas) {
