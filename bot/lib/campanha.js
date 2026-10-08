@@ -36,7 +36,13 @@ export function regras() {
 // --- leitura ---
 export async function insightsPorAnuncio({ dias = 7 } = {}) {
   const { conta } = cfg();
-  const j = await graph(`act_${conta}/insights`, { params: { level: 'ad', fields: 'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,actions', date_preset: dias <= 1 ? 'today' : `last_${dias}d`, limit: 200 } });
+  const date_preset = dias <= 1 ? 'today' : `last_${dias}d`;
+  const j = await graph(`act_${conta}/insights`, { params: { level: 'ad', fields: 'ad_id,ad_name,adset_id,campaign_id,spend,impressions,clicks,actions', date_preset, limit: 200 } });
+  if (!(j.data || []).length) {
+    // Diagnóstico (sem segredos): a conta responde mas sem linhas; quantos anúncios o token enxerga?
+    const ads = await graph(`act_${conta}/ads`, { params: { fields: 'id,effective_status', limit: 50 } }).catch(e => ({ erro: e.message }));
+    console.warn(`[campanha] insights vazios em act_${conta} (${date_preset}); anúncios visíveis: ${ads.erro ? 'erro ' + ads.erro : (ads.data || []).length}; resposta: ${JSON.stringify(j).slice(0, 300)}`);
+  }
   return (j.data || []).map(r => {
     const conv = (r.actions || []).find(a => a.action_type === 'onsite_conversion.messaging_conversation_started_7d');
     return { ad_id: r.ad_id, ad_name: r.ad_name, adset_id: r.adset_id, campaign_id: r.campaign_id, gasto: Number(r.spend || 0), impressoes: Number(r.impressions || 0), cliques: Number(r.clicks || 0), conversas: Number(conv?.value || 0) };
