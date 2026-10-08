@@ -99,11 +99,16 @@ export function relatorio(decisoes, R = regras()) {
 }
 
 // --- criação do rascunho (tudo PAUSADO) ---
+// Chave da região "São Paulo (state)" na API da Meta, confirmada por leitura do ad set em 08/10/2026.
+export const REGIAO_SAO_PAULO = '460';
+
 async function regiaoSaoPaulo() {
-  const j = await graph('search', { params: { type: 'adgeolocation', q: 'São Paulo', location_types: ['region'], country_code: 'BR' } });
-  const r = (j.data || []).find(x => /s[aã]o paulo/i.test(x.name)) || j.data?.[0];
-  if (!r) throw new Error('[campanha] região São Paulo não encontrada');
-  return r.key;
+  try {
+    const j = await graph('search', { params: { type: 'adgeolocation', q: 'São Paulo', location_types: ['region'], country_code: 'BR' } });
+    const r = (j.data || []).find(x => /s[aã]o paulo/i.test(x.name));
+    if (r?.key) return String(r.key);
+  } catch (e) { console.warn('[campanha] busca da região falhou, usando chave conhecida:', e.message); }
+  return REGIAO_SAO_PAULO;
 }
 
 // Textos informativos, dentro do Provimento 205/2021: sem valores, sem promessa, sem "clique e reduza".
