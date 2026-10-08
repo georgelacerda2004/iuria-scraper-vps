@@ -146,6 +146,7 @@ let ultimoRelatorioDia = '';
 async function rodarCampanha() {
   if (!process.env.META_ADS_TOKEN || !process.env.META_PAGE_ID) return;
   const r = await cicloCampanha();
+  console.log(`[campanha] ciclo ok: ${r.decisoes.length} anúncio(s) avaliado(s), ${r.feitas.length} ação(ões)`);
   const hojeSP = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   const horaSP = Number(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false }));
   if (r.feitas.length || (horaSP >= 8 && ultimoRelatorioDia !== hojeSP)) { await avisarOperador(r.relatorio); ultimoRelatorioDia = hojeSP; }
