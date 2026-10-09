@@ -44,17 +44,21 @@ export async function htmlParaPdf(html) {
   const done = new Promise(res => doc.on('end', () => res(Buffer.concat(chunks))));
   const larg = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   doc.font('Times-Roman').fontSize(12);
-  let alinea = 0;
+  let alinea = 0, fechou = false;
   for (const b of blocos) {
     if (b.tipo === 'enderecamento') { doc.font('Times-Bold').text(b.texto.toUpperCase(), { align: 'center', lineGap: 4 }).font('Times-Roman'); doc.moveDown(6); }
     else if (b.tipo === 'titulo') { doc.moveDown(1).font('Times-Bold').fontSize(13).text(b.texto.toUpperCase(), { align: 'center', lineGap: 4 }).fontSize(12).font('Times-Roman'); doc.moveDown(1); alinea = 0; }
     else if (b.tipo === 'secao') { doc.moveDown(0.8).font('Times-Bold').text(b.texto.toUpperCase(), { align: 'left', lineGap: 4 }).font('Times-Roman'); doc.moveDown(0.3); alinea = 0; }
     else if (b.tipo === 'li') { const letra = String.fromCharCode(97 + (alinea++ % 26)) + ') '; doc.text(letra + b.texto, { align: 'justify', indent: 1.5 * CM, lineGap: 4, width: larg }); doc.moveDown(0.3); }
-    else if (b.tipo === 'fechamento') { doc.moveDown(1).text(b.texto, { align: 'center', lineGap: 4 }); }
+    else if (b.tipo === 'fechamento') {
+      // Fecho + data + assinatura ficam juntos: se não cabem (~6 cm), vão para a página seguinte.
+      if (!fechou && doc.y > doc.page.height - doc.page.margins.bottom - 6 * CM) doc.addPage();
+      fechou = true;
+      doc.moveDown(1).text(b.texto, { align: 'center', lineGap: 4 });
+    }
     else if (b.tipo === 'assinatura') {
       doc.moveDown(2);
       const x = doc.page.margins.left + (larg - 8 * CM) / 2;
-      if (doc.y > doc.page.height - doc.page.margins.bottom - 60) doc.addPage();
       doc.moveTo(x, doc.y).lineTo(x + 8 * CM, doc.y).stroke();
       doc.moveDown(0.3).text(b.texto, { align: 'center', lineGap: 4 });
     }
