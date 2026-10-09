@@ -15,6 +15,7 @@ import { rodar as rodarFollowups, horaComercial } from './lib/followup.js';
 import { responder } from './lib/cerebro.js';
 import { rodar as rodarPos } from './lib/pos.js';
 import { sincronizar as sincronizarTemplates } from './lib/templates.js';
+import { montarRouter as painel } from './lib/painel.js';
 
 // Variáveis ainda não preenchidas no Render vêm como "PREENCHER": tratar como ausentes.
 for (const [k, v] of Object.entries(process.env)) if (v === 'PREENCHER') delete process.env[k];
@@ -24,7 +25,7 @@ if (faltando.length) console.warn('[bot] variáveis ainda não preenchidas:', fa
 const OPCIONAIS = ['WABA_ID', 'WEBHOOK_VERIFY_TOKEN', 'SUPABASE_URL', 'CLAUDE_MODEL', 'NOME_ROBO', 'NOME_ESCRITORIO', 'ESCRITORIO_ID',
   'ADVOGADO_NOME', 'ADVOGADO_OAB', 'RESPONSAVEL_NOME', 'ESCRITORIO_ENDERECO', 'FORO_CONTRATO', 'TRIBUNAL_PADRAO', 'HONORARIOS_ENTRADA', 'HONORARIOS_EXITO_PCT',
   'ASAAS_BASE_URL', 'ASAAS_WEBHOOK_TOKEN', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID', 'META_ADS_TOKEN', 'META_AD_ACCOUNT_ID', 'META_PAGE_ID',
-  'SISTEMA_PADRAO', 'CAMPANHA_AUTOPAUSAR', 'OPERADOR_WHATSAPP', 'NODE_VERSION', 'HONORARIOS_ADEXITUM_PCT', 'WABA_ID_PROD', 'LINK_CONSULTA_PROCESSO', 'WHATSAPP_TEMPLATES'];
+  'SISTEMA_PADRAO', 'CAMPANHA_AUTOPAUSAR', 'OPERADOR_WHATSAPP', 'NODE_VERSION', 'HONORARIOS_ADEXITUM_PCT', 'WABA_ID_PROD', 'LINK_CONSULTA_PROCESSO', 'WHATSAPP_TEMPLATES', 'PAINEL_SENHA'];
 const ausentes = OPCIONAIS.filter(k => !process.env[k]);
 console.log('[bot] variáveis opcionais ausentes (padrão interno ou recurso desligado):', ausentes.length ? ausentes.join(', ') : 'nenhuma');
 
@@ -36,6 +37,7 @@ const app = express();
 app.use(express.json({ limit: '2mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
+app.use('/painel', painel()); // painel de gestão (senha em PAINEL_SENHA)
 
 // Verificação do webhook (Meta chama 1x ao cadastrar a URL no painel do app).
 app.get('/webhook', (req, res) => {

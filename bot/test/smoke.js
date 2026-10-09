@@ -333,3 +333,19 @@ console.log('smoke ok (peticao + campanha)');
   assert.deepEqual(Object.keys(definicoes()), ['se_retomada', 'se_processo_protocolado', 'se_andamento', 'se_pendencia']);
   console.log('smoke ok (pos)');
 }
+
+// --- painel: resumo, funil, auth ---
+{
+  const { resumirConversa, funil, montarRouter } = await import('../lib/painel.js');
+  const c = resumirConversa({ id: 'x', wa_id: '5511987654321', nome_perfil: 'Ana', etapa: 'docs', consentimento_em: 'd', triagem: { resultado: 'favoravel', pagamento: 'apos_liminar', calculo: { renda_liquida: 1000, percentual_renda_comprometido: 60, sobra_mensal: -200, indicativo: 'favoravel' }, documentos: { pessoal: {} } } });
+  assert.equal(c.telefone, '(11) 98765-4321'); assert.equal(c.pct, 60); assert.equal(c.docs, 1); assert.equal(c.rotulo, 'Mandando documentos');
+  const f = funil([c, resumirConversa({ etapa: 'consentimento', wa_id: '1' })]);
+  assert.equal(f.total, 2); assert.equal(f.favoraveis, 1); assert.equal(f.sem_resposta, 1); assert.equal(f.por_pagamento.apos_liminar, 1);
+  const express = (await import('express')).default;
+  const a = express(); a.use('/painel', montarRouter({ senha: 'abc' }));
+  const srv = a.listen(0); const porta = srv.address().port;
+  const r1 = await fetch(`http://127.0.0.1:${porta}/painel/api/resumo`); assert.equal(r1.status, 401);
+  const r2 = await fetch(`http://127.0.0.1:${porta}/painel/`); assert.equal(r2.status, 200); assert.match(await r2.text(), /Painel Superendividamento/);
+  srv.close();
+  console.log('smoke ok (painel)');
+}

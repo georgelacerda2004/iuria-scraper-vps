@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Painel Superendividamento</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --ink:#1b1f24; --mut:#6b7280; --line:#e5e7eb; --ok:#15803d; --warn:#b45309; --bad:#b91c1c; --acc:#1d4ed8; --chip:#eef2ff; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --card:#171a21; --ink:#e7e9ee; --mut:#9aa3b2; --line:#2a2f3a; --chip:#1f2937; } }
+  * { box-sizing:border-box } body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink) }
+  header { position:sticky; top:0; background:var(--card); border-bottom:1px solid var(--line); padding:10px 16px; display:flex; gap:12px; align-items:center; z-index:2 }
+  header h1 { font-size:16px; margin:0; flex:1 } header small { color:var(--mut) }
+  main { padding:12px 16px 40px; max-width:1200px; margin:0 auto }
+  .grid { display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); margin:10px 0 }
+  .tile { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px } .tile b { display:block; font-size:22px } .tile span { color:var(--mut); font-size:12px }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--mut); margin:18px 0 6px }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:13px }
+  th, td { padding:8px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top } th { color:var(--mut); font-weight:600; font-size:12px } tr:last-child td { border-bottom:0 }
+  tr.lead { cursor:pointer } tr.lead:hover td { background:var(--chip) }
+  .chip { display:inline-block; padding:2px 8px; border-radius:999px; background:var(--chip); font-size:12px; white-space:nowrap }
+  .ok { color:var(--ok) } .warn { color:var(--warn) } .bad { color:var(--bad) } .mut { color:var(--mut) }
+  .right { text-align:right } .nowrap { white-space:nowrap }
+  #login { max-width:360px; margin:80px auto; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px }
+  input, button, select { font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink) } button.p { background:var(--acc); color:#fff; border-color:var(--acc) } button { cursor:pointer }
+  #det { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; z-index:5 } #det.on { display:block }
+  #det .box { position:absolute; right:0; top:0; bottom:0; width:min(560px,100%); background:var(--card); overflow:auto; padding:16px; border-left:1px solid var(--line) }
+  .msg { max-width:88%; padding:8px 10px; border-radius:12px; margin:6px 0; white-space:pre-wrap; font-size:13px } .in { background:var(--chip); margin-right:auto } .out { background:#dcfce7; color:#14532d; margin-left:auto } @media (prefers-color-scheme: dark) { .out { background:#14532d; color:#dcfce7 } }
+  .msg small { display:block; color:var(--mut); font-size:11px; margin-top:3px }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 } .filtros { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 }
+  @media (max-width:700px) { .hide-m { display:none } td, th { padding:6px 6px } }
+</style>
+</head>
+<body>
+<div id="login">
+  <h2 style="margin-top:0">Painel Superendividamento</h2>
+  <p class="mut">Senha do painel (definida no Render).</p>
+  <input id="senha" type="password" placeholder="senha" style="width:100%"><br><br>
+  <button class="p" onclick="entrar()">Entrar</button> <span id="loginerr" class="bad"></span>
+</div>
+<div id="app" style="display:none">
+<header><h1>Superendividamento · AJF</h1><small id="quando"></small><button onclick="carregar()">Atualizar</button><button onclick="sair()">Sair</button></header>
+<main>
+  <h2>Campanha (Meta, 7 dias · hoje)</h2>
+  <div class="grid" id="camp"></div>
+  <table id="ads"><thead><tr><th>Anúncio</th><th class="right">Gasto 7d</th><th class="right">Hoje</th><th class="right">Conversas</th><th class="right">R$/conv</th><th class="right hide-m">Leads no robô</th><th class="right">Qualificados</th><th class="right hide-m">R$/qualif.</th><th class="right">Pagos</th></tr></thead><tbody></tbody></table>
+  <h2>Funil (todos os leads)</h2>
+  <div class="grid" id="funil"></div>
+  <h2>Leads</h2>
+  <div class="filtros"><select id="fEtapa" onchange="render()"><option value="">Todas as etapas</option></select><select id="fRes" onchange="render()"><option value="">Qualquer triagem</option><option value="favoravel">Favorável</option><option value="desfavoravel">Desfavorável</option><option value="inconclusivo">Inconclusivo</option></select><input id="fBusca" placeholder="nome ou telefone" oninput="render()"></div>
+  <table id="leads"><thead><tr><th>Lead</th><th>Etapa</th><th class="hide-m">Triagem</th><th class="right">Renda</th><th class="right">% dívidas</th><th class="right hide-m">Sobra</th><th class="hide-m">Entrada</th><th class="nowrap">Última msg</th></tr></thead><tbody></tbody></table>
+</main>
+</div>
+<div id="det" onclick="if(event.target===this)fechar()"><div class="box" id="detbox"></div></div>
+<script>
+const $ = (s) => document.querySelector(s);
+let DADOS = null, timer = null;
+const brl = (n) => n == null ? '—' : 'R$ ' + Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const dt = (s) => s ? new Date(s).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+const rel = (s) => { if (!s) return '—'; const m = Math.round((Date.now() - new Date(s)) / 60000); return m < 60 ? m + ' min' : m < 1440 ? Math.round(m / 60) + ' h' : Math.round(m / 1440) + ' d'; };
+const esc = (t) => String(t ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function senha() { try { return localStorage.getItem('painel_senha') || ''; } catch { return ''; } }
+async function api(p, opt = {}) { const r = await fetch('/painel/api' + p, { ...opt, headers: { 'x-painel': senha(), 'Content-Type': 'application/json', ...(opt.headers || {}) } }); if (r.status === 401) { sair(); throw new Error('senha'); } const j = await r.json(); if (!r.ok) throw new Error(j.erro || r.status); return j; }
+function entrar() { try { localStorage.setItem('painel_senha', $('#senha').value); } catch {} carregar(); }
+function sair() { try { localStorage.removeItem('painel_senha'); } catch {} $('#app').style.display = 'none'; $('#login').style.display = 'block'; clearInterval(timer); }
+async function carregar() {
+  if (!senha()) return;
+  try { DADOS = await api('/resumo'); } catch (e) { $('#loginerr').textContent = e.message === 'senha' ? 'Senha inválida.' : 'Erro: ' + e.message; return; }
+  $('#login').style.display = 'none'; $('#app').style.display = 'block'; $('#loginerr').textContent = '';
+  render(); clearInterval(timer); timer = setInterval(carregar, 30000);
+}
+function tile(b, s, cls = '') { return `<div class="tile"><b class="${cls}">${b}</b><span>${s}</span></div>`; }
+function render() {
+  const d = DADOS; if (!d) return;
+  $('#quando').textContent = 'atualizado ' + dt(d.agora) + ' · Meta ' + rel(d.campanha.atualizado_em) + ' atrás';
+  const c = d.campanha, t = c.total, f = d.funil;
+  $('#camp').innerHTML = [
+    tile(brl(t.gasto), 'gasto nos últimos 7 dias'), tile(brl(t.hoje) + ' <small class="mut">/ ' + brl(c.orcamento_dia) + '</small>', 'gasto hoje / orçamento'),
+    tile(t.conversas, 'conversas iniciadas (Meta)'), tile(t.conversas ? brl(t.gasto / t.conversas) : '—', 'custo por conversa'),
+    tile(t.qualificados, 'leads qualificados (triagem favorável)'), tile(t.qualificados ? brl(t.gasto / t.qualificados) : '—', 'custo por qualificado'),
+    tile(t.pagos, 'clientes pagos'), tile(t.pagos ? brl(t.gasto / t.pagos) : '—', 'custo por cliente pago', t.pagos && t.gasto / t.pagos < c.entrada ? 'ok' : ''),
+    c.erro ? tile('!', 'Meta: ' + esc(c.erro), 'bad') : '',
+  ].join('');
+  $('#ads tbody').innerHTML = c.anuncios.map(a => `<tr><td>${esc(a.ad_name)}</td><td class="right">${brl(a.gasto)}</td><td class="right">${brl(a.hoje.gasto)}</td><td class="right">${a.conversas}</td><td class="right">${a.custo_conversa == null ? '—' : brl(a.custo_conversa)}</td><td class="right hide-m">${a.leads}</td><td class="right">${a.qualificados}</td><td class="right hide-m">${a.custo_qualificado == null ? '—' : brl(a.custo_qualificado)}</td><td class="right">${a.pagos}</td></tr>`).join('') || '<tr><td colspan="9" class="mut">sem dados do Meta ainda</td></tr>';
+  $('#funil').innerHTML = [
+    tile(f.total, 'chegaram' + (f.anuncio !== f.total ? ' (' + f.anuncio + ' do anúncio)' : '')), tile(f.consentiram, 'aceitaram o atendimento'), tile(f.sem_resposta, 'sem resposta ao SIM', 'warn'),
+    tile(f.triagem_fechada, 'triagem concluída'), tile(f.favoraveis, 'favoráveis', 'ok'), tile(f.proposta_aceita, 'aceitaram a proposta'),
+    tile(f.em_docs, 'mandando documentos'), tile(f.aguardando, 'pagamento / assinatura'), tile(f.clientes, 'clientes', 'ok'), tile(f.pagos, 'entradas pagas', 'ok'),
+    tile(f.handoff, 'com humano', f.handoff ? 'warn' : ''), tile(f.desistiram, 'não quiseram'),
+    tile(`${f.por_pagamento.agora} / ${f.por_pagamento.apos_liminar} / ${f.por_pagamento.ad_exitum}`, 'entrada: agora / após liminar / ad exitum'),
+  ].join('');
+  const sel = $('#fEtapa'); if (sel.options.length === 1) { const vistos = [...new Set(d.conversas.map(x => x.etapa))]; for (const e of vistos) { const o = document.createElement('option'); o.value = e; o.textContent = d.conversas.find(x => x.etapa === e).rotulo; sel.appendChild(o); } }
+  const fe = sel.value, fr = $('#fRes').value, fb = $('#fBusca').value.toLowerCase();
+  const lista = d.conversas.filter(x => (!fe || x.etapa === fe) && (!fr || x.resultado === fr) && (!fb || (x.nome + x.telefone + x.wa_id).toLowerCase().includes(fb)));
+  const cor = (x) => x.etapa === 'cliente' ? 'ok' : x.etapa === 'handoff' ? 'warn' : ['desistiu', 'inviavel', 'encerrado'].includes(x.etapa) ? 'mut' : '';
+  $('#leads tbody').innerHTML = lista.map(x => `<tr class="lead" onclick="abrir('${x.id}')"><td><b>${esc(x.nome) || '—'}</b><br><span class="mut nowrap">${esc(x.telefone)}</span></td><td><span class="chip ${cor(x)}">${esc(x.rotulo)}</span>${x.followup_n ? `<br><small class="mut">${x.followup_n} follow-up(s)</small>` : ''}${x.pago_em ? '<br><small class="ok">entrada paga</small>' : ''}</td><td class="hide-m">${x.resultado ? `<span class="${x.resultado === 'favoravel' ? 'ok' : x.resultado === 'desfavoravel' ? 'bad' : 'warn'}">${esc(x.resultado)}</span>` : (x.consentiu ? '<span class="mut">em andamento</span>' : '<span class="mut">—</span>')}</td><td class="right">${x.renda == null ? '—' : brl(x.renda)}</td><td class="right">${x.pct == null ? '—' : `<b class="${x.pct >= 30 ? 'bad' : ''}">${x.pct}%</b>`}</td><td class="right hide-m">${x.sobra == null ? '—' : `<span class="${x.sobra < 600 ? 'bad' : ''}">${brl(x.sobra)}</span>`}</td><td class="hide-m">${x.pagamento ? esc({ agora: 'agora', apos_liminar: 'após liminar', ad_exitum: 'ad exitum' }[x.pagamento]) : '—'}</td><td class="nowrap">${dt(x.ultima_msg_em)}<br><small class="mut">${rel(x.ultima_msg_em)} atrás</small></td></tr>`).join('') || '<tr><td colspan="8" class="mut">nenhum lead</td></tr>';
+}
+async function abrir(id) {
+  $('#det').classList.add('on'); $('#detbox').innerHTML = '<p class="mut">carregando…</p>';
+  let x; try { x = await api('/conversas/' + id); } catch (e) { $('#detbox').innerHTML = '<p class="bad">' + esc(e.message) + '</p>'; return; }
+  const calc = x.triagem?.calculo; const dividas = x.triagem?.dividas || [];
+  $('#detbox').innerHTML = `
+    <div class="bar"><button onclick="fechar()">← voltar</button><a class="chip" href="https://wa.me/${x.wa_id}" target="_blank">abrir no WhatsApp</a>${x.etapa !== 'handoff' ? `<button onclick="acao('${x.id}','assumir')">Assumir (Paula para)</button>` : ''}${['handoff', 'desistiu', 'encerrado', 'inviavel'].includes(x.etapa) ? `<button class="p" onclick="acao('${x.id}','retomar')">Devolver à Paula</button>` : ''}</div>
+    <h2 style="margin-top:6px">${esc(x.nome) || '—'} · ${esc(x.telefone)}</h2>
+    <p><span class="chip">${esc(x.rotulo)}</span> ${x.ad_id ? '<span class="chip">anúncio ' + esc(x.ad_id) + '</span>' : ''} <span class="mut">chegou ${dt(x.criado_em)}</span></p>
+    ${x.handoff_motivo ? `<p class="warn"><b>Motivo do handoff:</b> ${esc(x.handoff_motivo)}</p>` : ''}
+    ${x.resumo ? `<p><b>Resumo da Paula:</b> ${esc(x.resumo)}</p>` : ''}
+    ${calc ? `<p><b>Medição:</b> renda ${brl(calc.renda_liquida)} · parcelas ${brl(calc.parcelas_mensais_consideradas)} (${calc.percentual_renda_comprometido}%) · sobra ${brl(calc.sobra_mensal)} vs mínimo ${brl(calc.minimo_existencial)} · ${calc.credores_considerados} credor(es) · saldo ${brl(calc.saldo_total_considerado)} · indicativo <b>${esc(calc.indicativo)}</b></p>` : ''}
+    ${dividas.length ? '<ul>' + dividas.map(d => `<li>${esc(d.credor)} · ${esc(d.tipo)} · ${brl(d.parcela_mensal)}/mês · saldo ${brl(d.saldo_total)}</li>`).join('') + '</ul>' : ''}
+    <p><b>Captação:</b> ${x.docs}/3 documentos${x.cpf ? ' · CPF ok' : ''} · entrada: ${x.pagamento ? esc(x.pagamento) : '—'}${x.cobranca?.url ? ` · <a href="${esc(x.cobranca.url)}" target="_blank">cobrança</a>` : ''}${x.pago_em ? ' · <span class="ok">paga ' + dt(x.pago_em) + '</span>' : ''}</p>
+    ${x.assinaturas.length ? '<ul>' + x.assinaturas.map(a => `<li>${esc(a.nome)}: <b class="${a.status === 'assinado' ? 'ok' : 'warn'}">${esc(a.status)}</b> · <a href="${esc(a.link)}" target="_blank">link</a></li>`).join('') + '</ul>' : ''}
+    ${x.processo ? `<p><b>Processo:</b> ${esc(x.processo.numero || 'sem número (petição em preparação)')} · ${esc(x.processo.status_processo || '')} ${esc([x.processo.tribunal, x.processo.vara, x.processo.comarca].filter(Boolean).join(' · '))}</p>` : ''}
+    ${x.followup_n ? `<p class="mut">${x.followup_n} follow-up(s), último ${dt(x.followup_em)}</p>` : ''}
+    <h2>Conversa</h2>
+    ${x.mensagens.map(m => `<div class="msg ${m.direcao}">${esc(m.texto || '[' + m.tipo + ']')}<small>${m.direcao === 'in' ? 'lead' : 'Paula'} · ${dt(m.criado_em)}</small></div>`).join('')}`;
+}
+async function acao(id, a) { if (!confirm(a === 'retomar' ? 'Devolver esta conversa à Paula? Ela retoma em horário comercial.' : 'Assumir? A Paula para de responder esta pessoa.')) return; try { await api(`/conversas/${id}/${a}`, { method: 'POST' }); await carregar(); abrir(id); } catch (e) { alert(e.message); } }
+function fechar() { $('#det').classList.remove('on'); }
+if (senha()) carregar(); else $('#login').style.display = 'block';
+</script>
+</body>
+</html>
