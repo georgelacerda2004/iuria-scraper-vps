@@ -130,6 +130,26 @@ export async function receberDocumento(conversa, ev, deps = {}) {
   return { respostas: [MSG.processando], patch, acao: 'concluir' };
 }
 
+// Reemite os documentos para assinatura (ex.: contrato com cláusula nova) para quem ainda não assinou.
+// Os links antigos ficam registrados em triagem.assinaturas_antigas. Devolve { respostas, patch }.
+export async function reemitirDocumentos(conversa, deps = {}) {
+  const { buscarCliente = iuria.buscarCliente, gerar = gerarTodos, enviar = iuria.enviarParaAssinatura } = deps;
+  const triagem = conversa.triagem || {};
+  const cliente = await buscarCliente(conversa.cliente_id);
+  if (!cliente) throw new Error('[captacao] cliente não encontrado para reemitir');
+  const pdfs = await gerar(cliente, triagem);
+  const docs = [];
+  for (const d of pdfs) {
+    const r = await enviar({ tipoDoc: d.tipo, nomeDoc: d.nome, clienteId: cliente.id, processoId: null, pdfBase64: d.pdf.toString('base64'), nomeSignatario: cliente.nome });
+    docs.push({ tipo: d.tipo, nome: d.nome, autentiqueId: r.autentiqueId, link: r.link });
+  }
+  const nome = (conversa.nome_perfil || '').split(' ')[0];
+  const texto = `${nome ? nome + ', a' : 'A'}qui é a ${NOME_ROBO()}. Atualizei os seus documentos com condições de honorários mais claras e mais leves: o êxito agora é calculado só sobre o que você economizar por mês, parcelado, e nunca passa de um quarto do alívio. Os links anteriores perdem a validade. Assine por aqui, pelo celular:\n` +
+    docs.map((d, i) => `${i + 1}. ${d.nome}: ${d.link}`).join('\n') + `\n\nQualquer dúvida sobre o contrato, me pergunta.`;
+  const { reemitir, ...resto } = triagem;
+  return { respostas: [texto], patch: { assinado_em: null, triagem: { ...resto, assinaturas: docs, assinaturas_antigas: [...(triagem.assinaturas_antigas || []), ...(triagem.assinaturas || [])], reemitido_em: new Date().toISOString() } } };
+}
+
 // Cadastro no IURIA + cobrança + documentos para assinatura. Devolve { respostas, patch }.
 export async function concluirCadastro(conversa, deps = {}) {
   const { criarCliente = iuria.criarOuAcharCliente, registrarDoc = iuria.registrarDocumento, gerar = gerarTodos, enviar = iuria.enviarParaAssinatura, asaasCliente = asaas.garantirCliente, asaasCobranca = asaas.criarCobranca } = deps;

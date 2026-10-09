@@ -5,7 +5,7 @@ import { assinaturaValida, extrairEventos } from './lib/webhook.js';
 import { sendText, markRead } from './lib/whatsapp.js';
 import { upsertConversa, gravarMensagem, atualizarConversa, carregarHistorico } from './lib/db.js';
 import { proximoPasso } from './lib/fluxo.js';
-import { verificarConclusao, concluirCadastro, cpfValido, pedidoPendente, MSG as CAP } from './lib/captacao.js';
+import { verificarConclusao, concluirCadastro, reemitirDocumentos, cpfValido, pedidoPendente, MSG as CAP } from './lib/captacao.js';
 import { EVENTOS_PAGO } from './lib/asaas.js';
 import { db } from './lib/db.js';
 import { ciclo as cicloCampanha } from './lib/campanha.js';
@@ -114,9 +114,29 @@ async function verificarPendencias() {
   }
   await recuperarCadastros();
   await retomarConversas();
+  await reemitirPendentes();
   await confirmarPagamentosOfertas().catch(e => console.error('[mercado]', e.message));
 }
 if (process.env.NODE_ENV !== 'test') setInterval(() => fecharOfertas().then(n => n && console.log(`[mercado] ${n} oferta(s) fechada(s)`)).catch(e => console.error('[mercado]', e.message)), 60_000);
+
+// Conversas marcadas pelo operador com triagem.reemitir = true (ex.: contrato com cláusula nova): reemite os documentos
+// e manda os links novos. Se o WhatsApp recusar (fora da janela de 24 h), os links novos ficam no follow-up e no painel.
+async function reemitirPendentes() {
+  const s = db();
+  if (!s) return;
+  const { data } = await s.from('se_conversas').select('*').eq('etapa', 'pagamento_assinatura').filter('triagem->>reemitir', 'eq', 'true').limit(10);
+  for (const c of data || []) {
+    try {
+      const r = await reemitirDocumentos(c);
+      await atualizarConversa(c.id, r.patch);
+      for (const texto of r.respostas) {
+        try { const out = await sendText(c.wa_id, texto); await gravarMensagem({ conversaId: c.id, waId: c.wa_id, direcao: 'out', tipo: 'text', texto, waMessageId: out?.messages?.[0]?.id }); }
+        catch (e) { console.warn('[reemitir] mensagem não entregue (janela?):', c.wa_id, e.message); }
+      }
+      console.log('[reemitir]', c.wa_id, 'documentos reemitidos');
+    } catch (e) { console.error('[reemitir]', c.wa_id, e.message); await atualizarConversa(c.id, { triagem: { ...(c.triagem || {}), reemitir: 'erro: ' + e.message } }).catch(() => {}); }
+  }
+}
 
 // Conversas marcadas para retomada pelo operador (etapa = 'retomar', ex.: handoff que não precisava):
 // o robô se reapresenta, pede o primeiro documento e volta ao fluxo normal.

@@ -173,6 +173,14 @@ const ccDif = await concluirCadastro({ ...conv, triagem: { ...conv.triagem, paga
 assert.equal(cobrou, false); assert.equal(ccDif.patch.asaas_payment_id, null); assert.match(ccDif.respostas[0], /depois da liminar/); assert.doesNotMatch(ccDif.respostas[0], /asaas/);
 conv = { ...conv, ...cc.patch };
 
+// --- captacao: reemissão dos documentos (cláusula nova) ---
+{
+  const { reemitirDocumentos } = await import('../lib/captacao.js');
+  const re = await reemitirDocumentos({ ...conv, nome_perfil: 'Maria Silva', triagem: { ...conv.triagem, reemitir: true } }, { buscarCliente: async () => clienteFake, enviar: async ({ tipoDoc }) => ({ autentiqueId: 'novo_' + tipoDoc, link: 'https://autentique/novo/' + tipoDoc }) });
+  assert.equal(re.patch.triagem.assinaturas.length, 4); assert.equal(re.patch.triagem.assinaturas_antigas.length, 4); assert.equal(re.patch.triagem.reemitir, undefined);
+  assert.match(re.respostas[0], /^Maria, aqui é a Paula[\s\S]*novo\/se_hipossuficiencia/);
+}
+
 // --- captacao: ainda pendente → só marca pago; depois concluído → processo ---
 let avisos = [];
 const vDeps = {
