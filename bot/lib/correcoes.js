@@ -34,7 +34,8 @@ export async function aplicarCorrecoes({ s = db(), correcoes = lerCorrecoes() } 
     for (const d of c.distribuicoes || []) {
       const { data } = await s.from('distribuicoes').select('partes,valor_causa').eq('id', d.id).maybeSingle();
       if (!data) continue;
-      const jaFeita = Number(data.valor_causa) === Number(d.valor_causa) && JSON.stringify(data.partes?.passivo) === JSON.stringify(d.passivo);
+      const cnpjs = l => (l || []).map(x => x.cnpj || x.cpf_cnpj || '').join(',');
+      const jaFeita = Number(data.valor_causa) === Number(d.valor_causa) && cnpjs(data.partes?.passivo) === cnpjs(d.passivo);
       if (jaFeita) continue;
       const patch = { valor_causa: d.valor_causa, partes: { ...(data.partes || {}), passivo: d.passivo } };
       const { error } = await s.from('distribuicoes').update(patch).eq('id', d.id);
