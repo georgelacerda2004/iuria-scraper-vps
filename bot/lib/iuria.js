@@ -91,7 +91,8 @@ export async function criarProcesso({ cliente, escritorioId, triagem }) {
   const { data, error } = await s.from('processos').insert({
     cliente_id: cliente.id,
     objeto_acao: 'Repactuação de dívidas — Lei 14.181/2021 (art. 104-A do CDC)',
-    tipo_processo: 'Judicial', status_processo: 'Ativo', area_atuacao: 'Cível', posicao_parte: 'Autor',
+    // Valores dentro dos CHECKs da tabela processos: status 'A distribuir' (ainda não protocolado), grau '1g', sistema 'esaj'.
+    tipo_processo: 'Judicial', status_processo: 'A distribuir', grau: '1g', sistema: (process.env.SISTEMA_PADRAO || 'esaj').toLowerCase(), area_atuacao: 'Cível', posicao_parte: 'Autor',
     natureza: 'Superendividamento', tribunal: process.env.TRIBUNAL_PADRAO || 'TJSP', uf: cliente.uf || 'SP', comarca: cliente.cidade || null,
     parte_adversa_texto: (triagem?.calculo ? [] : []).concat(((triagem?.credores) || []).map(c => c.credor)).join(', ') || 'Credores (ver declaração)',
     responsavel: process.env.RESPONSAVEL_NOME || process.env.ADVOGADO_NOME || null, advogado_nome: process.env.ADVOGADO_NOME || null, advogado_oab: process.env.ADVOGADO_OAB || null,
