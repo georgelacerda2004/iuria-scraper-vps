@@ -1,0 +1,15 @@
+{
+  "name": "robo-protocolo-esaj",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Robô de protocolo no e-SAJ (TJSP) que consome a fila do painel da Paula. Roda no PC do escritório com o certificado A3.",
+  "scripts": {
+    "start": "node robo.mjs",
+    "ensaio": "node robo.mjs --ensaio",
+    "assistido": "node robo.mjs --assistido"
+  },
+  "dependencies": {
+    "playwright": "^1.50.0"
+  }
+}

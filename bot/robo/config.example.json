@@ -1,0 +1,13 @@
+{
+  "painel_url": "https://superendividamento-bot.onrender.com/painel/api",
+  "painel_senha": "COLOQUE_A_SENHA_DO_PAINEL",
+  "robo": "pc-escritorio",
+  "perfil_chrome": "C:\\robo-protocolo\\perfil-chrome",
+  "pasta_downloads": "C:\\robo-protocolo\\downloads",
+  "pasta_prints": "C:\\robo-protocolo\\prints",
+  "esaj": {
+    "portal": "https://esaj.tjsp.jus.br/esaj/portal.do?servico=740000",
+    "peticao_inicial": "https://esaj.tjsp.jus.br/petpg/abrirPeticaoInicial.do"
+  },
+  "intervalo_segundos": 60
+}
