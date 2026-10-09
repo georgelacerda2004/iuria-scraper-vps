@@ -11,6 +11,7 @@ import { projetarPlano, checklistFechamento, briefingFechamento } from './plano.
 import { MSG } from './fluxo.js';
 import { sendText } from './whatsapp.js';
 import { gravarMensagem } from './db.js';
+import { aprovar, reabrir, fila, pegar, registrarResultado } from './protocolo.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const ETAPAS = ['novo', 'consentimento', 'triagem', 'proposta', 'docs', 'pagamento_assinatura', 'cliente', 'handoff', 'retomar', 'desistiu', 'inviavel', 'encerrado'];
@@ -85,9 +86,27 @@ export function montarRouter({ senha = process.env.PAINEL_SENHA } = {}) {
   r.use('/api', (req, res, next) => {
     if (!senha) return res.status(503).json({ erro: 'PAINEL_SENHA não definida no Render' });
     // A senha vai no header; a rota da petição aceita ?senha= para abrir numa aba do navegador.
-    if (req.get('x-painel') !== senha && !(req.path.startsWith('/peticao/') && req.query.senha === senha)) return res.status(401).json({ erro: 'senha inválida' });
+    const abreNoNavegador = req.path.startsWith('/peticao/') || req.path.startsWith('/arquivo');
+    if (req.get('x-painel') !== senha && !(abreNoNavegador && req.query.senha === senha)) return res.status(401).json({ erro: 'senha inválida' });
     next();
   });
+  // Arquivo do bucket "documentos" (PDF do pacote, recibo, print de erro): redireciona para um link assinado de 1 h.
+  r.get('/api/arquivo', async (req, res) => {
+    try {
+      const s = db(); if (!s) return res.status(503).json({ erro: 'sem banco' });
+      const p = String(req.query.path || '');
+      if (!/^se-uploads\//.test(p)) return res.status(400).json({ erro: 'caminho inválido' });
+      const { data, error } = await s.storage.from('documentos').createSignedUrl(p, 3600);
+      if (error) return res.status(404).json({ erro: error.message });
+      res.redirect(data.signedUrl);
+    } catch (e) { res.status(500).json({ erro: e.message }); }
+  });
+  // Fila de protocolo: aprovação do advogado e API do robô do PC (ver docs/PROTOCOLO.md).
+  r.post('/api/distribuicoes/:id/aprovar', async (req, res) => { try { res.json({ ok: true, progresso: await aprovar(req.params.id, { por: String(req.body?.por || 'painel') }) }); } catch (e) { res.status(400).json({ erro: e.message }); } });
+  r.post('/api/distribuicoes/:id/reabrir', async (req, res) => { try { await reabrir(req.params.id); res.json({ ok: true }); } catch (e) { res.status(400).json({ erro: e.message }); } });
+  r.get('/api/fila', async (_req, res) => { try { res.json({ itens: await fila() }); } catch (e) { res.status(500).json({ erro: e.message }); } });
+  r.post('/api/fila/:id/pegar', async (req, res) => { try { await pegar(req.params.id, { robo: String(req.body?.robo || 'pc') }); res.json({ ok: true }); } catch (e) { res.status(409).json({ erro: e.message }); } });
+  r.post('/api/fila/:id/resultado', express.json({ limit: '20mb' }), async (req, res) => { try { res.json({ ok: true, resultado: await registrarResultado(req.params.id, req.body || {}) }); } catch (e) { res.status(400).json({ erro: e.message }); } });
   // Petição gerada (HTML pronto para imprimir/exportar em PDF) de uma entrevista do IURIA.
   r.get('/api/peticao/:entrevistaId', async (req, res) => {
     try {
@@ -126,7 +145,7 @@ export function montarRouter({ senha = process.env.PAINEL_SENHA } = {}) {
       let processo = null, distribuicao = null;
       if (c.processo_id) {
         const { data: p } = await s.from('processos').select('numero,status_processo,fase,tribunal,vara,comarca').eq('id', c.processo_id).maybeSingle(); processo = p;
-        const { data: d } = await s.from('distribuicoes').select('id,status,valor_causa,created_at,entrevista_id').eq('processo_id', c.processo_id).order('created_at', { ascending: false }).limit(1).maybeSingle(); distribuicao = d;
+        const { data: d } = await s.from('distribuicoes').select('id,status,valor_causa,created_at,entrevista_id,progresso,resultado,numero_processo').eq('processo_id', c.processo_id).order('created_at', { ascending: false }).limit(1).maybeSingle(); distribuicao = d;
       }
       const plano = projetarPlano(c.triagem || {});
       const checklist = checklistFechamento({ conversa: c, assinaturas, processo, distribuicao });

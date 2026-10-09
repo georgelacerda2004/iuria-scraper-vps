@@ -12,6 +12,7 @@ import { ciclo as cicloCampanha } from './lib/campanha.js';
 import { avisarOperador, buscarCliente, criarEntrevista } from './lib/iuria.js';
 import { prepararProtocolo, entrevistaGerada } from './lib/peticao.js';
 import { aplicarCorrecoes } from './lib/correcoes.js';
+import { prepararPacotes } from './lib/protocolo.js';
 import { montarBriefing } from './lib/briefing.js';
 import { rodar as rodarFollowups, horaComercial } from './lib/followup.js';
 import { responder } from './lib/cerebro.js';
@@ -269,6 +270,9 @@ if (process.env.NODE_ENV !== 'test') {
   setInterval(() => rodarFollowups().then(n => n && console.log(`[followup] ${n} retomada(s) enviada(s)`)).catch(e => console.error('[followup]', e.message)), 10 * 60_000);
   setInterval(() => rodarPos().then(r => (r.protocolos || r.andamentos) && console.log(`[pos] ${r.protocolos} protocolo(s), ${r.andamentos} andamento(s) avisados`)).catch(e => console.error('[pos]', e.message)), 15 * 60_000);
   setTimeout(() => aplicarCorrecoes().catch(e => console.error('[correcoes]', e.message)), 20_000);
+  // Pacote de protocolo (PDFs) para toda distribuição com petição gerada: 60 s após o boot e a cada 5 min.
+  setTimeout(() => prepararPacotes().catch(e => console.error('[protocolo]', e.message)), 60_000);
+  setInterval(() => prepararPacotes().catch(e => console.error('[protocolo]', e.message)), 5 * 60_000);
 setTimeout(() => retentarPeticoes().catch(e => console.error('[peticao]', e.message)), 90_000);
   setInterval(() => retentarPeticoes().catch(e => console.error('[peticao]', e.message)), 15 * 60_000);
   if (process.env.WHATSAPP_TEMPLATES !== 'off') {

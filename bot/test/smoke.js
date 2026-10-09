@@ -282,6 +282,29 @@ assert.equal(pp2.distribuicaoId, 'dist-10'); assert.equal(gerouDeNovo, false); a
   console.log('smoke ok (credores/valor da causa/correções)');
 }
 
+// --- pacote de protocolo: HTML -> PDF, imagem -> PDF, fila ---
+{
+  const { extrairBlocos, htmlParaPdf, imagemParaPdf, montarPacote } = await import('../lib/pacote.js');
+  const html = `<!DOCTYPE html><html><head><style>p{}</style></head><body><div class="enderecamento">Excelentíssimo Senhor Doutor Juiz</div><p>FULANA, brasileira &amp; portadora do RG n&ordm; 1, vem propor</p><div class="titulo-acao">Ação de Repactuação em face de</div><p>BANCO X S.A.</p><div class="secao">I — DOS FATOS</div><p>1. Fato um.<br>Linha dois.</p><div class="secao">III — DOS PEDIDOS</div><ol class="pedidos"><li>pedido a;</li><li>pedido b.</li></ol><div class="fechamento">Termos em que, pede deferimento.</div><div class="assinatura"><div class="linha"></div>ADVOGADO<br>OAB/SP 1</div></body></html>`;
+  const b = extrairBlocos(html);
+  assert.deepEqual(b.map(x => x.tipo), ['enderecamento', 'p', 'titulo', 'p', 'secao', 'p', 'secao', 'li', 'li', 'fechamento', 'assinatura']);
+  assert.equal(b[1].texto, 'FULANA, brasileira & portadora do RG nº 1, vem propor'); assert.equal(b[5].texto, '1. Fato um.\nLinha dois.'); assert.equal(b[10].texto, 'ADVOGADO\nOAB/SP 1');
+  const pdf = await htmlParaPdf(html); assert.equal(pdf.subarray(0, 4).toString(), '%PDF'); assert.ok(pdf.length > 1500);
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+  const ipdf = await imagemParaPdf(png, 'image/png'); assert.equal(ipdf.subarray(0, 4).toString(), '%PDF');
+  await assert.rejects(imagemParaPdf(png, 'image/webp'), /não conversível/);
+  const subidos = {};
+  const r = await montarPacote({ distribuicao: { id: 'dddddddd-1111', anexos: [{ nome: 'RG', tipo: 'RG', storage_path: 'se-uploads/c1/rg.png', mime_type: 'image/png' }, { nome: 'Procuração (assinado).pdf', tipo: 'Procuração', storage_path: 'se-uploads/c1/proc.pdf', mime_type: 'application/pdf' }, { nome: 'audio', tipo: 'Outro', storage_path: 'se-uploads/c1/a.ogg', mime_type: 'audio/ogg' }] }, clienteId: 'c1', peticaoHtml: html, deps: { baixar: async () => png, subir: async (p, buf) => { subidos[p] = buf.length; return p; } } });
+  assert.equal(r.pacote.length, 3); assert.equal(r.pacote[0].nome, '01-peticao-inicial.pdf'); assert.equal(r.pacote[1].origem, 'convertido'); assert.equal(r.pacote[2].origem, 'original'); assert.equal(r.pacote[2].storage_path, 'se-uploads/c1/proc.pdf');
+  assert.ok(subidos['se-uploads/c1/protocolo/dddddddd/01-peticao-inicial.pdf'] > 1000); assert.equal(r.avisos.length, 1); assert.match(r.avisos[0], /audio\/ogg/);
+  await assert.rejects(montarPacote({ distribuicao: { id: 'x', anexos: [] }, clienteId: 'c1', peticaoHtml: '', deps: { subir: async p => p } }), /não gerada/);
+  const { montarItemFila, STATUS } = await import('../lib/protocolo.js');
+  assert.deepEqual(STATUS, ['rascunho', 'pronta', 'aprovada', 'em_protocolo', 'protocolada', 'erro']);
+  const item = await montarItemFila({ id: 'd1', status: 'aprovada', tribunal: 'TJSP', sistema: 'esaj', classe_nome: 'Classe', valor_causa: 8000, partes: { ativo: [], passivo: [{ nome: 'B', cnpj: '1' }] }, progresso: { pacote: r.pacote, aprovado_por: 'Dr. A', aprovado_em: 't' } }, { cliente: { nome: 'Fulana', cpf: '1', cidade: 'SP', uf: 'SP' }, assinarUrl: async p => 'https://x/' + p });
+  assert.equal(item.arquivos.length, 3); assert.equal(item.arquivos[0].url, 'https://x/se-uploads/c1/protocolo/dddddddd/01-peticao-inicial.pdf'); assert.equal(item.aprovado_por, 'Dr. A'); assert.equal(item.cliente.nome, 'Fulana');
+  console.log('smoke ok (pacote/protocolo)');
+}
+
 // --- campanha: regras de decisão e relatório ---
 const { decidir, relatorio: relCamp } = await import('../lib/campanha.js');
 const R = { orcamentoDiario: 100, gastoMinimoParaJulgar: 60, tetoCustoConversa: 25, tetoCustoLeadQualificado: 120, janelaDias: 7 };

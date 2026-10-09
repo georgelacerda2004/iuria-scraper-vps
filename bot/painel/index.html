@@ -11,6 +11,7 @@
   header { position:sticky; top:0; background:var(--card); border-bottom:1px solid var(--line); padding:10px 16px; display:flex; gap:12px; align-items:center; z-index:2 }
   header h1 { font-size:16px; margin:0; flex:1 } header small { color:var(--mut) }
   main { padding:12px 16px 40px; max-width:1200px; margin:0 auto }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin:10px 0 }
   .grid { display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); margin:10px 0 }
   .tile { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px } .tile b { display:block; font-size:22px } .tile span { color:var(--mut); font-size:12px }
   h2 { font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--mut); margin:18px 0 6px }
@@ -115,8 +116,9 @@ function render() {
       <table>${cab}<tbody>${itens.map(linha).join('') || '<tr><td colspan="9" class="mut">nenhum</td></tr>'}</tbody></table>`;
   }).join('');
 }
+let ABERTO = null;
 async function abrir(id) {
-  $('#det').classList.add('on'); $('#detbox').innerHTML = '<p class="mut">carregando…</p>';
+  ABERTO = id; $('#det').classList.add('on'); $('#detbox').innerHTML = '<p class="mut">carregando…</p>';
   let x; try { x = await api('/conversas/' + id); } catch (e) { $('#detbox').innerHTML = '<p class="bad">' + esc(e.message) + '</p>'; return; }
   const calc = x.triagem?.calculo; const dividas = x.triagem?.dividas || [];
   $('#detbox').innerHTML = `
@@ -134,7 +136,7 @@ async function abrir(id) {
         <tr><td>Saldo das dívidas / valor da causa</td><td class="right">${brl(x.plano.saldo)}</td><td class="right">${brl(x.plano.total_no_plano)} no plano${x.plano.cabe_no_prazo ? '' : ' <span class="bad">(não cobre o saldo)</span>'}</td></tr></table>
         <p class="mut" style="font-size:12px">Liminar: ${esc(x.plano.pedidos.liminar)}. ${esc(x.plano.aviso)}</p>` : ''}
       <ul style="columns:2;column-gap:16px;padding-left:18px;font-size:13px">${x.checklist.itens.map(i => `<li class="${i.feito ? 'ok' : 'mut'}">${i.feito ? '✔' : '○'} ${esc(i.rotulo)}${i.detalhe ? ` <small>· ${esc(i.detalhe)}</small>` : ''}</li>`).join('')}</ul>
-      ${x.distribuicao ? `<p><b>Petição no IURIA:</b> distribuição em rascunho (${esc(String(x.distribuicao.id).slice(0, 8))}) · valor da causa ${brl(x.distribuicao.valor_causa)} · ${dt(x.distribuicao.created_at)}${x.distribuicao.entrevista_id ? ` · <a href="/painel/api/peticao/${esc(x.distribuicao.entrevista_id)}?senha=${encodeURIComponent(senha())}" target="_blank">abrir petição</a>` : ''}</p>` : ''}
+      ${x.distribuicao ? blocoProtocolo(x) : ''}
     </div>` : ''}
     ${x.resumo ? `<p><b>Resumo da Paula:</b> ${esc(x.resumo)}</p>` : ''}
     ${calc ? `<p><b>Medição:</b> renda ${brl(calc.renda_liquida)} · parcelas ${brl(calc.parcelas_mensais_consideradas)} (${calc.percentual_renda_comprometido}%) · sobra ${brl(calc.sobra_mensal)} vs mínimo ${brl(calc.minimo_existencial)} · ${calc.credores_considerados} credor(es) · saldo ${brl(calc.saldo_total_considerado)} · indicativo <b>${esc(calc.indicativo)}</b></p>` : ''}
@@ -146,6 +148,20 @@ async function abrir(id) {
     <h2>Conversa</h2>
     ${x.mensagens.map(m => `<div class="msg ${m.direcao}">${esc(m.texto || '[' + m.tipo + ']')}<small>${m.direcao === 'in' ? 'lead' : 'Paula'} · ${dt(m.criado_em)}</small></div>`).join('')}`;
 }
+const ST = { rascunho: 'petição gerada, montando PDFs', pronta: 'PRONTA PARA PROTOCOLAR', aprovada: 'aprovada, aguardando o robô do escritório', em_protocolo: 'robô protocolando agora', protocolada: 'PROTOCOLADA', erro: 'PAROU: precisa de conferência' };
+function blocoProtocolo(x) {
+  const d = x.distribuicao, pg = d.progresso || {}, rs = d.resultado || {};
+  const arq = (pg.pacote || []).map(a => `<li><a href="/painel/api/arquivo?path=${encodeURIComponent(a.storage_path)}&senha=${encodeURIComponent(senha())}" target="_blank">${esc(a.nome)}</a> <small>(${esc(a.tipo)}${a.origem === 'convertido' ? ', convertido de imagem' : ''})</small></li>`).join('');
+  const botoes = ['pronta', 'erro'].includes(d.status) ? `<button class="p" onclick="aprovarProtocolo('${d.id}')">Aprovar e protocolar</button>` : d.status === 'aprovada' ? `<button onclick="reabrirProtocolo('${d.id}')">Cancelar aprovação</button>` : '';
+  return `<div class="card"><p><b>Protocolo:</b> ${esc(ST[d.status] || d.status)} · valor da causa ${brl(d.valor_causa)} · distribuição ${esc(String(d.id).slice(0, 8))} · ${dt(d.created_at)}${d.entrevista_id ? ` · <a href="/painel/api/peticao/${esc(d.entrevista_id)}?senha=${encodeURIComponent(senha())}" target="_blank">abrir petição</a>` : ''}</p>
+    ${d.numero_processo ? `<p><b>Número do processo:</b> ${esc(d.numero_processo)}${rs.recibo_path ? ` · <a href="/painel/api/arquivo?path=${encodeURIComponent(rs.recibo_path)}&senha=${encodeURIComponent(senha())}" target="_blank">recibo</a>` : ''}</p>` : ''}
+    ${d.status === 'erro' ? `<p style="color:#b00"><b>Erro do robô:</b> ${esc(rs.erro || '')}${rs.tela_path ? ` · <a href="/painel/api/arquivo?path=${encodeURIComponent(rs.tela_path)}&senha=${encodeURIComponent(senha())}" target="_blank">ver tela</a>` : ''}</p>` : ''}
+    ${arq ? `<p><b>PDFs do pacote (${(pg.pacote || []).length}):</b></p><ul>${arq}</ul>` : ''}${(pg.avisos || []).length ? `<p><small>Avisos: ${esc(pg.avisos.join('; '))}</small></p>` : ''}
+    ${pg.aprovado_em ? `<p><small>Aprovado por ${esc(pg.aprovado_por || '')} em ${dt(pg.aprovado_em)}</small></p>` : ''}
+    <div class="bar">${botoes}</div></div>`;
+}
+async function aprovarProtocolo(id) { const por = prompt('Quem aprova (nome do advogado)? Este toque autoriza o robô a protocolar com o certificado A3.'); if (!por) return; try { await api(`/distribuicoes/${id}/aprovar`, { method: 'POST', body: JSON.stringify({ por }) }); alert('Aprovado. O robô do escritório pega na fila em até 1 minuto.'); await carregar(); abrir(ABERTO); } catch (e) { alert(e.message); } }
+async function reabrirProtocolo(id) { if (!confirm('Cancelar a aprovação? O robô não vai protocolar.')) return; try { await api(`/distribuicoes/${id}/reabrir`, { method: 'POST' }); await carregar(); abrir(ABERTO); } catch (e) { alert(e.message); } }
 async function mensagem(id) { const texto = prompt('Texto que a Paula vai mandar para esta pessoa:'); if (!texto) return; try { const r = await api(`/conversas/${id}/mensagem`, { method: 'POST', body: JSON.stringify({ texto }) }); alert(r.enviada ? 'Enviada.' : 'Fora da janela de 24 h: ficou na fila e sai quando a pessoa escrever (' + (r.motivo || '') + ').'); abrir(id); } catch (e) { alert(e.message); } }
 async function acao(id, a) { const perg = { retomar: 'Devolver esta conversa à Paula? Ela retoma em horário comercial.', assumir: 'Assumir? A Paula para de responder esta pessoa.', oferecer: 'Oferecer este lead aos advogados parceiros? A Paula pede o consentimento da pessoa; com o SIM, a oferta abre sozinha (1 h, lance mínimo R$ 500).' }[a]; if (!confirm(perg)) return; try { const r = await api(`/conversas/${id}/${a}`, { method: 'POST' }); if (r.aguardando_consentimento) alert('A Paula perguntou à pessoa. Quando ela responder SIM, a oferta abre e você vê aqui em "Mercado".'); await carregar(); abrir(id); } catch (e) { alert(e.message); } }
 async function acaoOferta(id, a) { if (!confirm(a === 'cancelar' ? 'Cancelar esta oferta? O lead volta à etapa anterior.' : 'Reabrir esta oferta por mais 1 h?')) return; try { await api(`/ofertas/${id}/${a}`, { method: 'POST' }); await carregarMercado(); } catch (e) { alert(e.message); } }
