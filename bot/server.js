@@ -124,7 +124,9 @@ if (process.env.NODE_ENV !== 'test') setInterval(() => fecharOfertas().then(n =>
 async function reemitirPendentes() {
   const s = db();
   if (!s) return;
-  const { data } = await s.from('se_conversas').select('*').eq('etapa', 'pagamento_assinatura').filter('triagem->>reemitir', 'eq', 'true').limit(10);
+  // 'true' = pedido novo; 'erro: ...unavailable_credits' = tenta de novo a cada ciclo até o Autentique voltar.
+  const { data: todas } = await s.from('se_conversas').select('*').eq('etapa', 'pagamento_assinatura').not('triagem->>reemitir', 'is', null).limit(20);
+  const data = (todas || []).filter(c => c.triagem?.reemitir === true || /unavailable_credits|fetch failed|HTTP 5/.test(String(c.triagem?.reemitir)));
   for (const c of data || []) {
     try {
       const r = await reemitirDocumentos(c);

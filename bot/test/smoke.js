@@ -173,6 +173,23 @@ const ccDif = await concluirCadastro({ ...conv, triagem: { ...conv.triagem, paga
 assert.equal(cobrou, false); assert.equal(ccDif.patch.asaas_payment_id, null); assert.match(ccDif.respostas[0], /depois da liminar/); assert.doesNotMatch(ccDif.respostas[0], /asaas/);
 conv = { ...conv, ...cc.patch };
 
+// --- captacao: Autentique indisponível no cadastro → segue sem links e reenvia depois ---
+{
+  const sem = await concluirCadastro(conv, {
+    criarCliente: async () => clienteFake, registrarDoc: async () => {}, asaasCliente: async () => 'cus_1', asaasCobranca: async () => ({ id: 'pay_2', url: 'https://asaas/pay_2' }),
+    enviar: async () => { throw new Error('[iuria] autentique-enviar: Autentique: unavailable_credits'); },
+  });
+  assert.equal(sem.patch.etapa, 'pagamento_assinatura'); assert.deepEqual(sem.patch.triagem.assinaturas, []); assert.match(sem.patch.triagem.assinaturas_erro, /unavailable_credits/);
+  assert.match(sem.respostas[0], /https:\/\/asaas\/pay_2[\s\S]*chegam em seguida/);
+  const c2 = { ...conv, ...sem.patch };
+  // ciclo seguinte, Autentique ainda fora → nada muda
+  let v0 = await verificarConclusao(c2, { consultarPagamento: async () => ({ pago: false }), buscarCliente: async () => clienteFake, enviar: async () => { throw new Error('unavailable_credits'); } });
+  assert.equal(v0, null);
+  // Autentique voltou → manda os 4 links
+  v0 = await verificarConclusao(c2, { consultarPagamento: async () => ({ pago: false }), buscarCliente: async () => clienteFake, enviar: async ({ tipoDoc }) => ({ autentiqueId: 'ok_' + tipoDoc, link: 'https://autentique/ok/' + tipoDoc }) });
+  assert.equal(v0.patch.triagem.assinaturas.length, 4); assert.equal(v0.patch.triagem.assinaturas_erro, null); assert.match(v0.respostas[0], /Maria, chegaram os seus documentos[\s\S]*ok\/se_hipossuficiencia/);
+}
+
 // --- captacao: reemissão dos documentos (cláusula nova) ---
 {
   const { reemitirDocumentos } = await import('../lib/captacao.js');

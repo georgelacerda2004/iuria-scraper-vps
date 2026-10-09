@@ -49,6 +49,11 @@ export const MSG = {
     : `Pronto! Como combinamos, ${modo === 'ad_exitum' ? 'não há entrada: o escritório só recebe ao final, se der certo' : `a entrada de R$ ${valor.toFixed(2).replace('.', ',')} fica para depois da liminar`}. Isso está escrito no contrato. Agora só falta *assinar pelo celular* (clique, confira e assine):\n` +
     docs.map((d, i) => `${i + 1}. ${d.nome}: ${d.link}`).join('\n') +
     `\n\nAssim que as assinaturas forem confirmadas, eu aviso o advogado e ele assume. Qualquer dúvida sobre o contrato, é só perguntar.`,
+  semAssinaturaAinda: ({ valor, urlPagamento, modo }) => (urlPagamento
+    ? `Pronto! Seu cadastro está feito. Primeiro passo, a *entrada dos honorários* (R$ ${valor.toFixed(2).replace('.', ',')}), por Pix, boleto ou cartão:\n${urlPagamento}\n\n`
+    : `Pronto! Seu cadastro está feito. Como combinamos, ${modo === 'ad_exitum' ? 'não há entrada' : 'a entrada fica para depois da liminar'}.\n\n`) +
+    `Os documentos para *assinar pelo celular* (procuração, contrato e declarações) chegam em seguida por aqui, assim que o sistema de assinatura liberar. Eu te mando os links.`,
+  linksAssinatura: (nome, docs) => `${nome ? nome.split(' ')[0] + ', c' : 'C'}hegaram os seus documentos para *assinar pelo celular* (clique, confira e assine):\n` + docs.map((d, i) => `${i + 1}. ${d.nome}: ${d.link}`).join('\n') + `\n\nQualquer dúvida sobre o contrato, é só perguntar.`,
   aguardando: ({ pago, assinados, total, diferido, modo }) => `Status: ${diferido ? (modo === 'ad_exitum' ? 'sem entrada (ad exitum)' : 'entrada combinada para depois da liminar') : `pagamento ${pago ? 'confirmado ✅' : 'pendente'}`}; assinaturas ${assinados}/${total}. ${(pago || diferido) && assinados === total ? 'Tudo certo!' : 'Quando concluir, eu sigo automaticamente.'}`,
   concluido: (nome, diferido) => `${nome ? nome.split(' ')[0] + ', t' : 'T'}udo confirmado: ${diferido ? 'documentos assinados' : 'pagamento e documentos assinados'}. Seu caso já está cadastrado e o advogado vai revisar e entrar em contato por aqui. Se tiver extratos ou contratos das dívidas, pode mandar por aqui que eu guardo na sua pasta.`,
   erro: 'Tive um problema ao processar. Já avisei a equipe; eles continuam com você por aqui.',
@@ -172,17 +177,29 @@ export async function concluirCadastro(conversa, deps = {}) {
     cobranca = await asaasCobranca({ customerId, valor: ENTRADA(), referencia, descricao: 'Entrada de honorários — análise e repactuação de dívidas (Lei 14.181/2021)' });
   }
 
+  // Assinaturas: se o Autentique falhar (ex.: sem créditos), o cadastro segue e o robô reenvia a cada ciclo (verificarConclusao).
+  let docs = [], assinaturasErro = null;
+  try { docs = await enviarAssinaturas(cliente, triagem, { gerar, enviar }); }
+  catch (e) { assinaturasErro = e.message; console.error('[captacao] assinaturas adiadas:', e.message); }
+
+  const respostas = docs.length
+    ? [MSG.linksEnvio({ valor: ENTRADA(), urlPagamento: cobranca?.url || null, docs, modo: modoEntrada(triagem) })]
+    : [MSG.semAssinaturaAinda({ valor: ENTRADA(), urlPagamento: cobranca?.url || null, modo: modoEntrada(triagem) })];
+  return {
+    respostas,
+    patch: { etapa: 'pagamento_assinatura', cliente_id: cliente.id, asaas_payment_id: cobranca?.id || null, triagem: { ...triagem, cobranca: cobranca ? { id: cobranca.id, url: cobranca.url, referencia } : { diferida: true, referencia }, assinaturas: docs, assinaturas_erro: assinaturasErro } },
+  };
+}
+
+// Gera os PDFs e envia cada um ao Autentique. Lança erro se qualquer envio falhar.
+export async function enviarAssinaturas(cliente, triagem, { gerar = gerarTodos, enviar = iuria.enviarParaAssinatura } = {}) {
   const pdfs = await gerar(cliente, triagem);
   const docs = [];
   for (const d of pdfs) {
     const r = await enviar({ tipoDoc: d.tipo, nomeDoc: d.nome, clienteId: cliente.id, processoId: null, pdfBase64: d.pdf.toString('base64'), nomeSignatario: cliente.nome });
     docs.push({ tipo: d.tipo, nome: d.nome, autentiqueId: r.autentiqueId, link: r.link });
   }
-
-  return {
-    respostas: [MSG.linksEnvio({ valor: ENTRADA(), urlPagamento: cobranca?.url || null, docs, modo: modoEntrada(triagem) })],
-    patch: { etapa: 'pagamento_assinatura', cliente_id: cliente.id, asaas_payment_id: cobranca?.id || null, triagem: { ...triagem, cobranca: cobranca ? { id: cobranca.id, url: cobranca.url, referencia } : { diferida: true, referencia }, assinaturas: docs } },
-  };
+  return docs;
 }
 
 // Checa pagamento + assinaturas de uma conversa. Devolve null (nada mudou) ou { respostas, patch }.
@@ -195,6 +212,15 @@ export async function verificarConclusao(conversa, deps = {}) {
   if (!pago && !diferido) {
     const r = await consultarPagamento(triagem.cobranca?.referencia || `SE|${conversa.id}`);
     if (r.pago) { pago = true; patch.pago_em = new Date().toISOString(); }
+  }
+  // Assinaturas que ficaram adiadas (Autentique indisponível na hora do cadastro): tenta de novo a cada ciclo.
+  if (!(triagem.assinaturas || []).length && triagem.assinaturas_erro) {
+    try {
+      const c0 = cliente || await (deps.buscarCliente || iuria.buscarCliente)(conversa.cliente_id);
+      const docs = await enviarAssinaturas(c0, triagem, { gerar: deps.gerar, enviar: deps.enviar });
+      const t2 = { ...triagem, assinaturas: docs, assinaturas_erro: null };
+      return { respostas: [MSG.linksAssinatura(conversa.nome_perfil, docs)], patch: { ...patch, triagem: t2 } };
+    } catch (e) { console.warn('[captacao] assinaturas ainda indisponíveis:', conversa.wa_id, e.message); return Object.keys(patch).length ? { respostas: [], patch } : null; }
   }
   const ids = (triagem.assinaturas || []).map(a => a.autentiqueId).filter(Boolean);
   const st = ids.length ? await statusAss(ids) : [];
