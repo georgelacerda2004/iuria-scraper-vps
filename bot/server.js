@@ -11,7 +11,8 @@ import { db } from './lib/db.js';
 import { ciclo as cicloCampanha } from './lib/campanha.js';
 import { avisarOperador } from './lib/iuria.js';
 import { montarBriefing } from './lib/briefing.js';
-import { rodar as rodarFollowups } from './lib/followup.js';
+import { rodar as rodarFollowups, horaComercial } from './lib/followup.js';
+import { responder } from './lib/cerebro.js';
 import { rodar as rodarPos } from './lib/pos.js';
 import { sincronizar as sincronizarTemplates } from './lib/templates.js';
 
@@ -112,17 +113,25 @@ async function verificarPendencias() {
 
 // Conversas marcadas para retomada pelo operador (etapa = 'retomar', ex.: handoff que não precisava):
 // o robô se reapresenta, pede o primeiro documento e volta ao fluxo normal.
+// Para onde volta: proposta aceita → docs; triagem favorável → proposta; senão → triagem. Só em horário comercial.
 async function retomarConversas() {
   const s = db();
-  if (!s) return;
+  if (!s || !horaComercial()) return;
   const { data } = await s.from('se_conversas').select('*').eq('etapa', 'retomar').limit(20);
   for (const c of data || []) {
     try {
-      const texto = CAP.retomada(c.nome_perfil);
+      const t = c.triagem || {};
+      let etapa, texto;
+      if (t.pagamento) { etapa = 'docs'; texto = CAP.retomada(c.nome_perfil); }
+      else {
+        etapa = t.resultado === 'favoravel' ? 'proposta' : 'triagem';
+        const historico = await carregarHistorico(c.id);
+        texto = (await responder({ historico, textoAtual: '[a conversa foi interrompida por engano; retome de onde parou, se apresentando de novo em meia linha]', fase: 'retomada' })).texto;
+      }
       const out = await sendText(c.wa_id, texto);
       await gravarMensagem({ conversaId: c.id, waId: c.wa_id, direcao: 'out', tipo: 'text', texto, waMessageId: out?.messages?.[0]?.id });
-      await atualizarConversa(c.id, { etapa: 'docs', handoff_em: null, handoff_motivo: null });
-      console.log('[retomar]', c.wa_id, 'voltou para docs');
+      await atualizarConversa(c.id, { etapa, handoff_em: null, handoff_motivo: null });
+      console.log('[retomar]', c.wa_id, 'voltou para', etapa);
     } catch (e) { console.error('[retomar]', c.wa_id, e.message); }
   }
 }

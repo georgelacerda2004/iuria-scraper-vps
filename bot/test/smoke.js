@@ -89,6 +89,8 @@ f = await proximoPasso({ etapa: 'consentimento' }, { texto: 'sim' });
 assert.equal(f.patch.etapa, 'triagem');
 f = await proximoPasso({ etapa: 'triagem' }, { texto: 'quero falar com advogado' });
 assert.equal(f.patch.etapa, 'handoff');
+for (const t of ['me passa pra um atendente', 'não quero falar com robô', 'posso falar com uma pessoa de verdade?', 'Cadê o advogado?']) { const h = await proximoPasso({ etapa: 'triagem' }, { texto: t }, { ia: async () => ({ texto: 'x' }) }); assert.equal(h.patch.etapa, 'handoff', 'deveria ser handoff: ' + t); }
+for (const t of ['minha prima está me ajudando com um Advogado', 'o advogado vai olhar isso?', 'já fui no atendente do banco', 'sou uma pessoa de bem']) { const h = await proximoPasso({ etapa: 'triagem' }, { texto: t }, { ia: async () => ({ texto: 'x' }) }); assert.notEqual(h.patch.etapa, 'handoff', 'não deveria ser handoff: ' + t); }
 f = await proximoPasso({ etapa: 'triagem' }, { texto: 'ganho 3 mil' }, { ia: async () => ({ texto: 'ok', triagem: { resultado: 'favoravel', resumo: 'x' }, calculo: { percentual_renda_comprometido: 40 } }) });
 assert.equal(f.patch.etapa, 'proposta'); // favorável: Paula explica o processo e as condições antes dos documentos
 assert.equal(f.respostas.length, 1);

@@ -20,7 +20,9 @@ export const MSG = {
 
 const RE_SIM = /^\s*(sim|s|ok|concordo|aceito|pode)\b/i;
 const RE_SAIR = /^\s*(sair|parar|cancelar|não|nao)\b/i;
-const RE_HUMANO = /(advogad|atendente|humano|pessoa de verdade|falar com alguém|falar com alguem)/i;
+// Pedido explícito de humano. Só a palavra "advogado" não basta: a pessoa fala do advogado do vizinho,
+// pergunta "o advogado vai ver?" etc. Exige verbo de pedido + alvo humano, ou "não quero falar com robô".
+const RE_HUMANO = /((quero|queria|gostaria|posso|pode|preciso|prefiro|me (passa|passe|transfere|transfira)|chama|chame|cad[êe]|liga|ligar)[^.!?\n]{0,25}(advogad|atendente|humano|pessoa de verdade|pessoa real|algu[ée]m de verdade|com algu[ée]m))|(n[ãa]o quero falar com (rob[ôo]|m[áa]quina|bot))|(falar com (um|uma|o|a) (advogad|atendente|pessoa))/i;
 
 // Recebe a conversa (linha do banco), o evento e o histórico; devolve { respostas: string[], patch: {} }.
 export async function proximoPasso(conversa, ev, opts = {}) {
