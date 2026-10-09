@@ -49,7 +49,7 @@
   <div id="mercado" class="mut">carregando…</div>
   <h2>Leads</h2>
   <div class="filtros"><select id="fEtapa" onchange="render()"><option value="">Todas as etapas</option></select><select id="fTemp" onchange="render()"><option value="">Qualquer temperatura</option><option value="pronto">Prontos para advogado</option><option value="quente">Quentes</option><option value="morno">Mornos</option><option value="frio">Frios</option></select><select id="fRes" onchange="render()"><option value="">Qualquer triagem</option><option value="favoravel">Favorável</option><option value="desfavoravel">Desfavorável</option><option value="inconclusivo">Inconclusivo</option></select><input id="fBusca" placeholder="nome ou telefone" oninput="render()"></div>
-  <table id="leads"><thead><tr><th>Lead</th><th>Temp.</th><th>Etapa</th><th class="hide-m">Triagem</th><th class="right">Renda</th><th class="right">% dívidas</th><th class="right hide-m">Sobra</th><th class="hide-m">Entrada</th><th class="nowrap">Última msg</th></tr></thead><tbody></tbody></table>
+  <div id="grupos"></div>
 </main>
 </div>
 <div id="det" onclick="if(event.target===this)fechar()"><div class="box" id="detbox"></div></div>
@@ -96,7 +96,24 @@ function render() {
   const lista = d.conversas.filter(x => (!fe || x.etapa === fe) && (!fr || x.resultado === fr) && (!ft || x.temperatura === ft) && (!fb || (x.nome + x.telefone + x.wa_id).toLowerCase().includes(fb))).sort((a, b) => ft ? b.score - a.score : 0);
   const temp = (x) => `<span class="chip ${x.temperatura === 'pronto' ? 'ok' : x.temperatura === 'quente' ? 'bad' : x.temperatura === 'morno' ? 'warn' : 'mut'}" title="score ${x.score}">${x.temperatura === 'pronto' ? '✔ pronto' : x.temperatura === 'quente' ? '🔥 ' + x.score : x.temperatura === 'morno' ? '🌤 ' + x.score : '· ' + x.score}</span>`;
   const cor = (x) => x.etapa === 'cliente' ? 'ok' : x.etapa === 'handoff' ? 'warn' : ['desistiu', 'inviavel', 'encerrado'].includes(x.etapa) ? 'mut' : '';
-  $('#leads tbody').innerHTML = lista.map(x => `<tr class="lead" onclick="abrir('${x.id}')"><td><b>${esc(x.nome) || '—'}</b><br><span class="mut nowrap">${esc(x.telefone)}</span></td><td>${temp(x)}</td><td><span class="chip ${cor(x)}">${esc(x.rotulo)}</span>${x.followup_n ? `<br><small class="mut">${x.followup_n} follow-up(s)</small>` : ''}${x.pago_em ? '<br><small class="ok">entrada paga</small>' : ''}</td><td class="hide-m">${x.resultado ? `<span class="${x.resultado === 'favoravel' ? 'ok' : x.resultado === 'desfavoravel' ? 'bad' : 'warn'}">${esc(x.resultado)}</span>` : (x.consentiu ? '<span class="mut">em andamento</span>' : '<span class="mut">—</span>')}</td><td class="right">${x.renda == null ? '—' : brl(x.renda)}</td><td class="right">${x.pct == null ? '—' : `<b class="${x.pct >= 30 ? 'bad' : ''}">${x.pct}%</b>`}</td><td class="right hide-m">${x.sobra == null ? '—' : `<span class="${x.sobra < 600 ? 'bad' : ''}">${brl(x.sobra)}</span>`}</td><td class="hide-m">${x.pagamento ? esc({ agora: 'agora', apos_liminar: 'após liminar', ad_exitum: 'ad exitum' }[x.pagamento]) : '—'}</td><td class="nowrap">${dt(x.ultima_msg_em)}<br><small class="mut">${rel(x.ultima_msg_em)} atrás</small></td></tr>`).join('') || '<tr><td colspan="9" class="mut">nenhum lead</td></tr>';
+  // Grupos: (1) mandaram documentação, fechados ou quase; (2) em andamento, ainda não fecharam; (3) chegaram e não falaram mais nada; (4) encerrados.
+  const grupo = (x) => x.etapa === 'cliente' || x.etapa === 'pagamento_assinatura' || x.etapa === 'indicado' || (x.etapa === 'docs' && x.docs > 0) ? 'fechados'
+    : ['novo', 'consentimento'].includes(x.etapa) ? 'sumiram'
+    : ['desistiu', 'inviavel', 'encerrado'].includes(x.etapa) ? 'encerrados' : 'andamento';
+  const GRUPOS = [
+    { k: 'fechados', titulo: 'Fechados e quase fechados', sub: 'mandaram documentação, assinando, pagando ou já cliente', cls: 'ok' },
+    { k: 'andamento', titulo: 'Em andamento, ainda não fecharam', sub: 'conversando com a Paula: triagem, proposta, começando documentos, ou com humano', cls: 'warn' },
+    { k: 'sumiram', titulo: 'Chegaram e não falaram mais nada', sub: 'não responderam ao SIM; recebem follow-up automático', cls: 'mut' },
+    { k: 'encerrados', titulo: 'Encerrados', sub: 'não quiseram, fora da lei ou pediram para sair', cls: 'mut' },
+  ];
+  const linha = (x) => `<tr class="lead" onclick="abrir('${x.id}')"><td><b>${esc(x.nome) || '—'}</b><br><span class="mut nowrap">${esc(x.telefone)}</span></td><td>${temp(x)}</td><td><span class="chip ${cor(x)}">${esc(x.rotulo)}</span>${x.followup_n ? `<br><small class="mut">${x.followup_n} follow-up(s)</small>` : ''}${x.pago_em ? '<br><small class="ok">entrada paga</small>' : ''}${x.etapa === 'docs' ? `<br><small class="mut">${x.docs} doc(s)</small>` : ''}</td><td class="hide-m">${x.resultado ? `<span class="${x.resultado === 'favoravel' ? 'ok' : x.resultado === 'desfavoravel' ? 'bad' : 'warn'}">${esc(x.resultado)}</span>` : (x.consentiu ? '<span class="mut">em andamento</span>' : '<span class="mut">—</span>')}</td><td class="right">${x.renda == null ? '—' : brl(x.renda)}</td><td class="right">${x.pct == null ? '—' : `<b class="${x.pct >= 30 ? 'bad' : ''}">${x.pct}%</b>`}</td><td class="right hide-m">${x.sobra == null ? '—' : `<span class="${x.sobra < 600 ? 'bad' : ''}">${brl(x.sobra)}</span>`}</td><td class="hide-m">${x.pagamento ? esc({ agora: 'agora', apos_liminar: 'após liminar', ad_exitum: 'ad exitum' }[x.pagamento]) : '—'}</td><td class="nowrap">${dt(x.ultima_msg_em)}<br><small class="mut">${rel(x.ultima_msg_em)} atrás</small></td></tr>`;
+  const cab = '<thead><tr><th>Lead</th><th>Temp.</th><th>Etapa</th><th class="hide-m">Triagem</th><th class="right">Renda</th><th class="right">% dívidas</th><th class="right hide-m">Sobra</th><th class="hide-m">Entrada</th><th class="nowrap">Última msg</th></tr></thead>';
+  $('#grupos').innerHTML = GRUPOS.map(g => {
+    const itens = lista.filter(x => grupo(x) === g.k).sort((a, b) => (ft ? b.score - a.score : 0) || new Date(b.ultima_msg_em) - new Date(a.ultima_msg_em));
+    const total = d.conversas.filter(x => grupo(x) === g.k).length;
+    return `<h3 style="margin:18px 0 4px;font-size:15px"><span class="${g.cls}">${g.titulo}</span> <span class="chip">${itens.length}${itens.length !== total ? ' de ' + total : ''}</span><br><small class="mut" style="font-weight:400">${g.sub}</small></h3>
+      <table>${cab}<tbody>${itens.map(linha).join('') || '<tr><td colspan="9" class="mut">nenhum</td></tr>'}</tbody></table>`;
+  }).join('');
 }
 async function abrir(id) {
   $('#det').classList.add('on'); $('#detbox').innerHTML = '<p class="mut">carregando…</p>';
