@@ -5,7 +5,7 @@ import { assinaturaValida, extrairEventos } from './lib/webhook.js';
 import { sendText, markRead } from './lib/whatsapp.js';
 import { upsertConversa, gravarMensagem, atualizarConversa, carregarHistorico } from './lib/db.js';
 import { proximoPasso } from './lib/fluxo.js';
-import { verificarConclusao, concluirCadastro, cpfValido, MSG as CAP } from './lib/captacao.js';
+import { verificarConclusao, concluirCadastro, cpfValido, pedidoPendente, MSG as CAP } from './lib/captacao.js';
 import { EVENTOS_PAGO } from './lib/asaas.js';
 import { db } from './lib/db.js';
 import { ciclo as cicloCampanha } from './lib/campanha.js';
@@ -128,13 +128,12 @@ async function retomarConversas() {
   for (const c of data || []) {
     try {
       const t = c.triagem || {};
-      let etapa, texto;
-      if (t.pagamento) { etapa = 'docs'; texto = CAP.retomada(c.nome_perfil); }
-      else {
-        etapa = t.resultado === 'favoravel' ? 'proposta' : 'triagem';
-        const historico = await carregarHistorico(c.id);
-        texto = (await responder({ historico, textoAtual: '[a conversa foi interrompida por engano; retome de onde parou, se apresentando de novo em meia linha]', fase: 'retomada' })).texto;
-      }
+      const jaEmDocs = t.pagamento || Object.keys(t.documentos || {}).length > 0;
+      const etapa = jaEmDocs ? 'docs' : t.resultado === 'favoravel' ? 'proposta' : 'triagem';
+      // A IA retoma com o histórico (responde o que ficou sem resposta); em docs, emenda o pedido do documento pendente.
+      const historico = await carregarHistorico(c.id);
+      let texto = (await responder({ historico, textoAtual: '[a conversa foi interrompida por engano; retome de onde parou, se apresentando de novo em meia linha e respondendo o que a pessoa perguntou por último, se houver]', fase: 'retomada' })).texto;
+      if (etapa === 'docs') { const p = pedidoPendente(t); if (p) texto += '\n\n' + p; }
       const out = await sendText(c.wa_id, texto);
       await gravarMensagem({ conversaId: c.id, waId: c.wa_id, direcao: 'out', tipo: 'text', texto, waMessageId: out?.messages?.[0]?.id });
       await atualizarConversa(c.id, { etapa, handoff_em: null, handoff_motivo: null });

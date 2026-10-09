@@ -54,7 +54,8 @@ export const MSG = {
   erro: 'Tive um problema ao processar. Já avisei a equipe; eles continuam com você por aqui.',
 };
 
-function slotAtual(triagem) {
+export function pedidoPendente(triagem) { const s = slotAtual(triagem); return s ? s.pede : null; }
+export function slotAtual(triagem) {
   const recebidos = triagem?.documentos || {};
   // Slot múltiplo (dívidas): os arquivos vão para `dividas_pendentes` e só viram `dividas` com "pronto" (ou [] com "pular").
   return SLOTS.find(s => recebidos[s.slot] === undefined) || null;

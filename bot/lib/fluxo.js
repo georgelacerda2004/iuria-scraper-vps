@@ -1,6 +1,6 @@
 // Fluxo da conversa: recepção → consentimento → triagem por IA → handoff/encerrado.
 import { responder } from './cerebro.js';
-import { receberDocumento, concluirCadastro, verificarConclusao, guardarExtra, pagamentoDiferido, modoEntrada, MSG as CAP } from './captacao.js';
+import { receberDocumento, concluirCadastro, verificarConclusao, guardarExtra, pedidoPendente, pagamentoDiferido, modoEntrada, MSG as CAP } from './captacao.js';
 import { resumoProcesso } from './iuria.js';
 
 const NOME_ROBO = process.env.NOME_ROBO || 'Paula';
@@ -29,6 +29,11 @@ const RE_SAIR = /^\s*(sair|parar|cancelar|não|nao)\b/i;
 // Pedido explícito de humano. Só a palavra "advogado" não basta: a pessoa fala do advogado do vizinho,
 // pergunta "o advogado vai ver?" etc. Exige verbo de pedido + alvo humano, ou "não quero falar com robô".
 const RE_HUMANO = /((quero|queria|gostaria|posso|pode|preciso|prefiro|me (passa|passe|transfere|transfira)|chama|chame|cad[êe]|liga|ligar)[^.!?\n]{0,25}(advogad|atendente|humano|pessoa de verdade|pessoa real|algu[ée]m de verdade|com algu[ée]m))|(n[ãa]o quero falar com (rob[ôo]|m[áa]quina|bot))|(falar com (um|uma|o|a) (advogad|atendente|pessoa))/i;
+// Perguntas sobre o advogado (nome, OAB, escritório, endereço) não são pedido de humano: a Paula responde.
+const RE_SOBRE_ADVOGADO = /(nome|oab|n[úu]mero|quem|qual|escrit[óo]rio|endere[çc]o|cnpj|confirmar|saber)[^.!?\n]{0,30}advogad|advogad[oa]?[^.!?\n]{0,20}(respons[áa]vel|oab|vai cuidar|vai atender)|\boab\b/i;
+const pedeHumano = (t) => RE_HUMANO.test(t) && !RE_SOBRE_ADVOGADO.test(t);
+// Pergunta no meio da coleta de documentos (não é arquivo, nem pular/pronto/CPF): a Paula responde e repete o pedido.
+const RE_PERGUNTA = /\?|^(quem|qual|quais|onde|como|por que|porque|pq|quanto|quando)\b|\b(nome|oab|endere[çc]o|seguro|confi[aá]vel|golpe|dúvida|duvida)\b/i;
 
 // Recebe a conversa (linha do banco), o evento e o histórico; devolve { respostas: string[], patch: {} }.
 export async function proximoPasso(conversa, ev, opts = {}) {
@@ -36,7 +41,7 @@ export async function proximoPasso(conversa, ev, opts = {}) {
   const etapa = conversa.etapa || 'novo';
   const texto = (ev.texto || '').trim();
 
-  if (RE_HUMANO.test(texto)) return { respostas: [MSG.handoff], patch: { etapa: 'handoff', handoff_em: new Date().toISOString() } };
+  if (pedeHumano(texto)) return { respostas: [MSG.handoff], patch: { etapa: 'handoff', handoff_em: new Date().toISOString() } };
   if (etapa === 'handoff') return { respostas: [], patch: {} }; // humano assumiu; robô fica quieto
   if (etapa === 'encerrado') return { respostas: [MSG.boasVindas(ev.nome)], patch: { etapa: 'consentimento' } };
 
@@ -66,6 +71,14 @@ export async function proximoPasso(conversa, ev, opts = {}) {
   // Pós-triagem (determinístico): documentos → cadastro → pagamento/assinatura → cliente.
   if (etapa === 'viavel') return { respostas: [CAP.inicioDocs(conversa.nome_perfil || ev.nome)], patch: { etapa: 'docs' } };
   if (etapa === 'docs') {
+    // Dúvida no meio dos documentos: a Paula responde (com o histórico) e repete o pedido do documento pendente.
+    if (!ev.mediaId && texto && !/^(pular|pronto)$/i.test(texto) && !/\d{11}/.test(texto.replace(/\D/g, '')) && RE_PERGUNTA.test(texto)) {
+      try {
+        const r = await ia({ historico, textoAtual: texto, fase: 'retomada', contexto: 'A pessoa está na etapa de envio de documentos e fez uma pergunta. Responda a pergunta em até 3 linhas, com honestidade, e termine dizendo que pode continuar mandando o documento quando quiser. Não repita o pedido do documento: ele vai emendado automaticamente.' });
+        const p = pedidoPendente(conversa.triagem);
+        return { respostas: [r.texto + (p ? '\n\n' + p : '')], patch: {}, usage: r.usage };
+      } catch (e) { console.error('[fluxo] dúvida em docs:', e.message); }
+    }
     let r;
     try { r = await receberDocumento(conversa, ev, opts.captacao); }
     catch (e) { console.error('[fluxo] documento falhou:', e.message); return { respostas: [MSG.erroIA], patch: {} }; }

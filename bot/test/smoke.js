@@ -90,7 +90,7 @@ assert.equal(f.patch.etapa, 'triagem');
 f = await proximoPasso({ etapa: 'triagem' }, { texto: 'quero falar com advogado' });
 assert.equal(f.patch.etapa, 'handoff');
 for (const t of ['me passa pra um atendente', 'não quero falar com robô', 'posso falar com uma pessoa de verdade?', 'Cadê o advogado?']) { const h = await proximoPasso({ etapa: 'triagem' }, { texto: t }, { ia: async () => ({ texto: 'x' }) }); assert.equal(h.patch.etapa, 'handoff', 'deveria ser handoff: ' + t); }
-for (const t of ['minha prima está me ajudando com um Advogado', 'o advogado vai olhar isso?', 'já fui no atendente do banco', 'sou uma pessoa de bem']) { const h = await proximoPasso({ etapa: 'triagem' }, { texto: t }, { ia: async () => ({ texto: 'x' }) }); assert.notEqual(h.patch.etapa, 'handoff', 'não deveria ser handoff: ' + t); }
+for (const t of ['minha prima está me ajudando com um Advogado', 'o advogado vai olhar isso?', 'já fui no atendente do banco', 'sou uma pessoa de bem', 'antes de enviar me documentos gostaria de confirmar o nome do advogado responsável', 'o número da OAB também', 'posso saber qual advogado vai cuidar?']) { const h = await proximoPasso({ etapa: 'triagem' }, { texto: t }, { ia: async () => ({ texto: 'x' }) }); assert.notEqual(h.patch.etapa, 'handoff', 'não deveria ser handoff: ' + t); }
 f = await proximoPasso({ etapa: 'triagem' }, { texto: 'ganho 3 mil' }, { ia: async () => ({ texto: 'ok', triagem: { resultado: 'favoravel', resumo: 'x' }, calculo: { percentual_renda_comprometido: 40 } }) });
 assert.equal(f.patch.etapa, 'proposta'); // favorável: Paula explica o processo e as condições antes dos documentos
 assert.equal(f.respostas.length, 1);
@@ -193,6 +193,12 @@ let hon = null;
 const vDif = await verificarConclusao({ ...conv, pago_em: null, triagem: { ...conv.triagem, pagamento: 'apos_liminar' } }, { ...vDeps, consultarPagamento: async () => { throw new Error('não deveria consultar'); }, statusAss: async (ids) => ids.map(id => ({ autentique_id: id, status: 'assinado' })), honorario: async (h) => { hon = h; }, avisar: async () => {}, preparar: async () => ({}) });
 assert.equal(vDif.patch.etapa, 'cliente'); assert.equal(hon.diferido, true); assert.match(vDif.respostas[0], /documentos assinados/);
 
+// --- docs: pergunta no meio da coleta → IA responde e repete o pedido pendente ---
+{
+  let fase = null;
+  const q = await proximoPasso({ etapa: 'docs', nome_perfil: 'Adriana', triagem: { documentos: { pessoal: { path: 'a' } } } }, { texto: 'qual o nome do advogado responsável?' }, { ia: async (a) => { fase = a.fase; return { texto: 'O advogado responsável é o Dr. X, OAB/SP 1.' }; } });
+  assert.equal(fase, 'retomada'); assert.match(q.respostas[0], /Dr\. X[\s\S]*comprovante de endereço/); assert.deepEqual(q.patch, {});
+}
 // --- fluxo: viavel → docs ---
 f = await proximoPasso({ etapa: 'viavel', nome_perfil: 'Maria Silva' }, { texto: 'ok' });
 assert.equal(f.patch.etapa, 'docs'); assert.match(f.respostas[0], /RG ou CNH/);
