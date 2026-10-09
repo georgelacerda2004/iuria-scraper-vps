@@ -9,7 +9,8 @@ import { verificarConclusao, concluirCadastro, reemitirDocumentos, cpfValido, pe
 import { EVENTOS_PAGO } from './lib/asaas.js';
 import { db } from './lib/db.js';
 import { ciclo as cicloCampanha } from './lib/campanha.js';
-import { avisarOperador } from './lib/iuria.js';
+import { avisarOperador, buscarCliente, criarEntrevista } from './lib/iuria.js';
+import { prepararProtocolo } from './lib/peticao.js';
 import { montarBriefing } from './lib/briefing.js';
 import { rodar as rodarFollowups, horaComercial } from './lib/followup.js';
 import { responder } from './lib/cerebro.js';
@@ -119,6 +120,36 @@ async function verificarPendencias() {
 }
 if (process.env.NODE_ENV !== 'test') setInterval(() => fecharOfertas().then(n => n && console.log(`[mercado] ${n} oferta(s) fechada(s)`)).catch(e => console.error('[mercado]', e.message)), 60_000);
 
+// Clientes com processo criado mas sem distribuição em rascunho (a geração da petição falhou, ex.: timeout da IA):
+// tenta de novo até 3 vezes, criando a entrevista se faltar. Nunca protocola.
+async function retentarPeticoes() {
+  const s = db();
+  if (!s) return;
+  const { data: convs } = await s.from('se_conversas').select('*').eq('etapa', 'cliente').not('processo_id', 'is', null).limit(30);
+  for (const c of convs || []) {
+    const tent = Number(c.triagem?.peticao_tentativas || 0);
+    if (tent >= 3) continue;
+    const { count } = await s.from('distribuicoes').select('id', { count: 'exact', head: true }).eq('processo_id', c.processo_id);
+    if (count) continue;
+    const triagem = c.triagem || {};
+    try {
+      const cliente = await buscarCliente(c.cliente_id);
+      if (!cliente) throw new Error('cliente não encontrado');
+      const historico = await carregarHistorico(c.id, 120);
+      const historicoTexto = historico.map(m => `${m.direcao === 'in' ? 'Cliente' : 'Paula'}: ${m.texto}`).join('\n');
+      const entrevistaId = await criarEntrevista({ cliente, processoId: c.processo_id, escritorioId: process.env.ESCRITORIO_ID, triagem, historicoTexto });
+      const r = await prepararProtocolo({ conversa: c, cliente, processoId: c.processo_id, entrevistaId, escritorioId: process.env.ESCRITORIO_ID, historicoTexto });
+      await atualizarConversa(c.id, { triagem: { ...triagem, peticao_tentativas: tent + 1 } });
+      await avisarOperador(`PETIÇÃO PRONTA PARA REVISÃO — ${cliente.nome}\nDistribuição em rascunho (${r.distribuicaoId || 'sem id'}) no IURIA. Falta: exportar o PDF da petição, completar CNPJ dos credores e assinar com o A3.${r.viabilidade?.fundamento_resumo ? '\nViabilidade (IA): ' + r.viabilidade.fundamento_resumo : ''}`);
+      console.log('[peticao] gerada na nova tentativa:', c.wa_id);
+    } catch (e) {
+      console.error('[peticao] tentativa', tent + 1, c.wa_id, e.message);
+      await atualizarConversa(c.id, { triagem: { ...triagem, peticao_tentativas: tent + 1, peticao_erro: e.message } }).catch(() => {});
+      if (tent + 1 >= 3) await avisarOperador(`FALHA ao gerar a petição de ${c.nome_perfil || c.wa_id} em 3 tentativas: ${e.message}. A entrevista está no IURIA para gerar manualmente.`);
+    }
+  }
+}
+
 // Conversas marcadas pelo operador com triagem.reemitir = true (ex.: contrato com cláusula nova): reemite os documentos
 // e manda os links novos. Se o WhatsApp recusar (fora da janela de 24 h), os links novos ficam no follow-up e no painel.
 async function reemitirPendentes() {
@@ -203,6 +234,8 @@ if (process.env.NODE_ENV !== 'test') setInterval(() => verificarPendencias().cat
 if (process.env.NODE_ENV !== 'test') {
   setInterval(() => rodarFollowups().then(n => n && console.log(`[followup] ${n} retomada(s) enviada(s)`)).catch(e => console.error('[followup]', e.message)), 10 * 60_000);
   setInterval(() => rodarPos().then(r => (r.protocolos || r.andamentos) && console.log(`[pos] ${r.protocolos} protocolo(s), ${r.andamentos} andamento(s) avisados`)).catch(e => console.error('[pos]', e.message)), 15 * 60_000);
+  setTimeout(() => retentarPeticoes().catch(e => console.error('[peticao]', e.message)), 90_000);
+  setInterval(() => retentarPeticoes().catch(e => console.error('[peticao]', e.message)), 15 * 60_000);
   if (process.env.WHATSAPP_TEMPLATES !== 'off') {
     setTimeout(() => sincronizarTemplates().catch(e => console.error('[templates]', e.message)), 30_000);
     setInterval(() => sincronizarTemplates().catch(e => console.error('[templates]', e.message)), 24 * 3600_000);
