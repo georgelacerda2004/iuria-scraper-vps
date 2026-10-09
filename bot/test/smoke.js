@@ -351,3 +351,33 @@ console.log('smoke ok (peticao + campanha)');
   srv.close();
   console.log('smoke ok (painel)');
 }
+
+// --- mercado de indicação: brief anonimizado, consentimento na Paula, área do parceiro ---
+{
+  const { montarBrief, mensagemIndicacao, ETAPAS_OFERTAVEIS, resumoBriefTexto } = await import('../lib/mercado.js');
+  const c = { wa_id: '5514996426132', nome_perfil: 'Jane Souza', etapa: 'desistiu', criado_em: 'x', triagem: { resultado: 'favoravel', fonte_renda: 'aposentado_pensionista', resumo: 'Jane é pensionista; Souza tem 3 cartões.', calculo: { renda_liquida: 760, parcelas_mensais_consideradas: 600, percentual_renda_comprometido: 78.9, sobra_mensal: 160, credores_considerados: 4, saldo_total_considerado: 6000, indicativo: 'favoravel' }, dividas: [{ tipo: 'consignado', credor: 'Banco X', parcela_mensal: 600, saldo_total: 0 }] } };
+  const b = montarBrief(c);
+  assert.equal(b.regiao, 'Bauru/Marília (SP)'); assert.doesNotMatch(b.resumo, /Jane|Souza/); assert.match(b.resumo, /\[cliente\]/); assert.equal(b.pct, 78.9);
+  assert.ok(!JSON.stringify(b).includes('5514996426132')); assert.ok(!JSON.stringify(b).includes('Jane'));
+  assert.match(resumoBriefTexto(b), /Região: Bauru/);
+  assert.match(mensagemIndicacao(c, { nome: 'Carlos Lima', uf: 'SP', oab: '123456', whatsapp: '11999990000' }), /^Jane, boa notícia.*Dr\(a\)\. Carlos Lima.*OAB\/SP 123456/);
+  assert.ok(ETAPAS_OFERTAVEIS.includes('desistiu') && !ETAPAS_OFERTAVEIS.includes('pagamento_assinatura') && !ETAPAS_OFERTAVEIS.includes('cliente'));
+  // fluxo: consentimento → oferta; não → volta; em_oferta/indicado respondem fixo; cancelar e problema
+  let f = await proximoPasso({ etapa: 'consentimento_indicacao', etapa_anterior: 'desistiu', nome_perfil: 'Jane' }, { texto: 'sim' });
+  assert.equal(f.oferecer, true); assert.equal(f.patch.etapa, 'em_oferta'); assert.ok(f.patch.consentimento_indicacao_em);
+  f = await proximoPasso({ etapa: 'consentimento_indicacao', etapa_anterior: 'desistiu' }, { texto: 'não' }); assert.equal(f.patch.etapa, 'desistiu'); assert.ok(!f.oferecer);
+  f = await proximoPasso({ etapa: 'consentimento_indicacao', etapa_anterior: 'docs' }, { texto: 'o que?' }); assert.match(f.respostas[0], /autorizar/);
+  f = await proximoPasso({ etapa: 'em_oferta' }, { texto: 'oi' }); assert.match(f.respostas[0], /encaminhado/);
+  f = await proximoPasso({ etapa: 'em_oferta', etapa_anterior: 'docs' }, { texto: 'cancelar indicação' }); assert.equal(f.cancelarOferta, true); assert.equal(f.patch.etapa, 'docs');
+  f = await proximoPasso({ etapa: 'indicado' }, { texto: 'estou com problema com o advogado' }); assert.equal(f.patch.etapa, 'handoff');
+  const { montarRouter } = await import('../lib/parceiros.js');
+  const express = (await import('express')).default;
+  const a = express(); a.use(express.json()); a.use('/parceiros', montarRouter());
+  const srv = a.listen(0); const porta = srv.address().port;
+  assert.equal((await fetch(`http://127.0.0.1:${porta}/parceiros/api/visao`)).status, 401);
+  assert.equal((await fetch(`http://127.0.0.1:${porta}/parceiros/api/cadastro`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: 'x' }) })).status, 400);
+  assert.match(await (await fetch(`http://127.0.0.1:${porta}/parceiros/termos`)).text(), /Termo de Adesão/);
+  assert.match(await (await fetch(`http://127.0.0.1:${porta}/parceiros/`)).text(), /Advogados parceiros/);
+  srv.close();
+  console.log('smoke ok (mercado)');
+}

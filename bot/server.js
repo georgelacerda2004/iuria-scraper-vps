@@ -16,6 +16,8 @@ import { responder } from './lib/cerebro.js';
 import { rodar as rodarPos } from './lib/pos.js';
 import { sincronizar as sincronizarTemplates } from './lib/templates.js';
 import { montarRouter as painel } from './lib/painel.js';
+import { montarRouter as parceiros } from './lib/parceiros.js';
+import { criarOferta, fecharOfertas, confirmarPagamentos as confirmarPagamentosOfertas } from './lib/mercado.js';
 
 // Variáveis ainda não preenchidas no Render vêm como "PREENCHER": tratar como ausentes.
 for (const [k, v] of Object.entries(process.env)) if (v === 'PREENCHER') delete process.env[k];
@@ -37,6 +39,7 @@ const app = express();
 app.use(express.json({ limit: '2mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
+app.use('/parceiros', parceiros()); // área do advogado parceiro (cadastro, ofertas, lances, casos comprados)
 app.use('/painel', painel()); // painel de gestão (senha em PAINEL_SENHA)
 
 // Verificação do webhook (Meta chama 1x ao cadastrar a URL no painel do app).
@@ -111,7 +114,9 @@ async function verificarPendencias() {
   }
   await recuperarCadastros();
   await retomarConversas();
+  await confirmarPagamentosOfertas().catch(e => console.error('[mercado]', e.message));
 }
+if (process.env.NODE_ENV !== 'test') setInterval(() => fecharOfertas().then(n => n && console.log(`[mercado] ${n} oferta(s) fechada(s)`)).catch(e => console.error('[mercado]', e.message)), 60_000);
 
 // Conversas marcadas para retomada pelo operador (etapa = 'retomar', ex.: handoff que não precisava):
 // o robô se reapresenta, pede o primeiro documento e volta ao fluxo normal.
@@ -210,7 +215,8 @@ async function tratarMensagem(ev) {
   markRead(ev.messageId).catch(() => {});
   // Histórico sem a mensagem atual (ela acabou de ser gravada e entra como textoAtual).
   const historico = (await carregarHistorico(conversa.id)).filter(m => !(m.direcao === 'in' && m.texto === ev.texto));
-  const { respostas, patch, usage } = await proximoPasso(conversa, ev, { historico });
+  const { respostas, patch, usage, oferecer, cancelarOferta } = await proximoPasso(conversa, ev, { historico });
+  if (cancelarOferta && conversa.oferta_id) await db()?.from('se_ofertas').update({ status: 'cancelada', atualizado_em: new Date().toISOString() }).eq('id', conversa.oferta_id).in('status', ['aberta', 'aguardando_pagamento']);
   if (usage) console.log(`[ia] ${ev.waId} in=${usage.input} out=${usage.output} cache=${usage.cache_read}`);
   for (const texto of respostas) {
     const r = await sendText(ev.waId, texto);
@@ -218,6 +224,8 @@ async function tratarMensagem(ev) {
   }
   if (Object.keys(patch).length) await atualizarConversa(conversa.id, patch);
   if (patch.etapa === 'handoff') await avisarHandoff({ ...conversa, ...patch });
+  // A pessoa autorizou a indicação: abre a oferta aos advogados parceiros.
+  if (oferecer) await criarOferta(conversa.id, { criadoPor: 'consentimento' }).catch(e => console.error('[mercado] criarOferta:', e.message));
 }
 
 // Aviso ao advogado com número e briefing quando a conversa passa para humano (Telegram e,

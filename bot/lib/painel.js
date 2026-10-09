@@ -6,12 +6,17 @@ import { fileURLToPath } from 'node:url';
 import { db, atualizarConversa } from './db.js';
 import { insightsPorAnuncio, leadsPorAnuncio } from './campanha.js';
 import { statusAssinaturas } from './iuria.js';
+import { criarOferta, ETAPAS_OFERTAVEIS } from './mercado.js';
+import { MSG } from './fluxo.js';
+import { sendText } from './whatsapp.js';
+import { gravarMensagem } from './db.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const ETAPAS = ['novo', 'consentimento', 'triagem', 'proposta', 'docs', 'pagamento_assinatura', 'cliente', 'handoff', 'retomar', 'desistiu', 'inviavel', 'encerrado'];
 export const ROTULO = {
   novo: 'Chegou', consentimento: 'Aguardando SIM', triagem: 'Em triagem', proposta: 'Proposta (Paula explicando)', docs: 'Mandando documentos',
   pagamento_assinatura: 'Pagamento / assinatura', cliente: 'Cliente', handoff: 'Com humano', retomar: 'Retomada agendada', desistiu: 'Não quis', inviavel: 'Fora da lei', encerrado: 'Saiu',
+  consentimento_indicacao: 'Perguntando se pode indicar', em_oferta: 'Em oferta a advogados', indicado: 'Indicado a parceiro',
 };
 const ORDEM = Object.fromEntries(ETAPAS.map((e, i) => [e, i]));
 
@@ -112,12 +117,53 @@ export function montarRouter({ senha = process.env.PAINEL_SENHA } = {}) {
       res.json({ ...resumirConversa(c), triagem: c.triagem, mensagens: msgs || [], assinaturas, cobranca: c.triagem?.cobranca || null, processo });
     } catch (e) { res.status(500).json({ erro: e.message }); }
   });
-  // Ações do operador: devolver à Paula (retomar) ou assumir (handoff: a Paula fica quieta).
+  // Ações do operador: devolver à Paula (retomar), assumir (handoff: a Paula fica quieta) ou oferecer a advogados
+  // (a Paula pede o consentimento da pessoa; com o SIM, a oferta abre sozinha).
   r.post('/api/conversas/:id/:acao', async (req, res) => {
     try {
       const { acao } = req.params;
       if (acao === 'retomar') await atualizarConversa(req.params.id, { etapa: 'retomar' });
       else if (acao === 'assumir') await atualizarConversa(req.params.id, { etapa: 'handoff', handoff_em: new Date().toISOString(), handoff_motivo: 'assumido pelo painel' });
+      else if (acao === 'oferecer') {
+        const s = db(); const { data: c } = await s.from('se_conversas').select('*').eq('id', req.params.id).maybeSingle();
+        if (!c) return res.status(404).json({ erro: 'não achei' });
+        if (!ETAPAS_OFERTAVEIS.includes(c.etapa)) return res.status(400).json({ erro: `lead em "${c.etapa}" não pode ser oferecido (já assinou ou pagou com o escritório)` });
+        if (c.consentimento_indicacao_em) { const o = await criarOferta(c.id, { criadoPor: 'painel' }); return res.json({ ok: true, oferta: o.id }); }
+        const texto = MSG.pedirIndicacao(c.nome_perfil);
+        const out = await sendText(c.wa_id, texto);
+        await gravarMensagem({ conversaId: c.id, waId: c.wa_id, direcao: 'out', tipo: 'text', texto, waMessageId: out?.messages?.[0]?.id });
+        await atualizarConversa(c.id, { etapa: 'consentimento_indicacao', etapa_anterior: c.etapa });
+        return res.json({ ok: true, aguardando_consentimento: true });
+      }
+      else return res.status(400).json({ erro: 'ação desconhecida' });
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ erro: e.message }); }
+  });
+  // Mercado: ofertas e lances para o operador; cancelar ou reabrir.
+  r.get('/api/ofertas', async (_req, res) => {
+    try {
+      const s = db(); if (!s) return res.status(503).json({ erro: 'sem banco' });
+      const { data: ofertas } = await s.from('se_ofertas').select('*').order('criado_em', { ascending: false }).limit(100);
+      const ids = (ofertas || []).map(o => o.id);
+      const { data: lances } = ids.length ? await s.from('se_lances').select('oferta_id,advogado_id,valor,criado_em').in('oferta_id', ids).order('valor', { ascending: false }) : { data: [] };
+      const { data: advs } = await s.from('se_advogados').select('id,nome,oab,uf,email,ativo,termo_aceito_em,criado_em').order('criado_em', { ascending: false });
+      const nomeAdv = Object.fromEntries((advs || []).map(a => [a.id, `${a.nome} (OAB/${a.uf} ${a.oab})`]));
+      const convIds = (ofertas || []).map(o => o.conversa_id);
+      const { data: convs } = convIds.length ? await s.from('se_conversas').select('id,nome_perfil,wa_id,etapa').in('id', convIds) : { data: [] };
+      const conv = Object.fromEntries((convs || []).map(c => [c.id, c]));
+      res.json({
+        advogados: advs || [],
+        ofertas: (ofertas || []).map(o => ({ ...o, lead: conv[o.conversa_id] ? { nome: conv[o.conversa_id].nome_perfil, telefone: formatar(conv[o.conversa_id].wa_id), etapa: conv[o.conversa_id].etapa } : null, vencedor: o.vencedor_id ? nomeAdv[o.vencedor_id] : null, lances: (lances || []).filter(l => l.oferta_id === o.id).map(l => ({ valor: Number(l.valor), advogado: nomeAdv[l.advogado_id] || '?', em: l.criado_em })) })),
+      });
+    } catch (e) { res.status(500).json({ erro: e.message }); }
+  });
+  r.post('/api/ofertas/:id/:acao', async (req, res) => {
+    try {
+      const s = db(); const { acao } = req.params;
+      const { data: o } = await s.from('se_ofertas').select('*').eq('id', req.params.id).maybeSingle();
+      if (!o) return res.status(404).json({ erro: 'não achei' });
+      if (acao === 'cancelar') { await s.from('se_ofertas').update({ status: 'cancelada', atualizado_em: new Date().toISOString() }).eq('id', o.id); const { data: c } = await s.from('se_conversas').select('etapa_anterior').eq('id', o.conversa_id).single(); await atualizarConversa(o.conversa_id, { etapa: c?.etapa_anterior || 'triagem', oferta_id: null }); }
+      else if (acao === 'reabrir') { if (!['expirada', 'cancelada'].includes(o.status)) return res.status(400).json({ erro: 'só reabre expirada ou cancelada' }); const n = await criarOferta(o.conversa_id, { criadoPor: 'painel (reaberta)', precoMinimo: Number(req.body?.preco_minimo) || undefined }); return res.json({ ok: true, oferta: n.id }); }
       else return res.status(400).json({ erro: 'ação desconhecida' });
       res.json({ ok: true });
     } catch (e) { res.status(500).json({ erro: e.message }); }

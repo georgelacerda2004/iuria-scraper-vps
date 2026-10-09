@@ -45,6 +45,8 @@
   <table id="ads"><thead><tr><th>Anúncio</th><th class="right">Gasto 7d</th><th class="right">Hoje</th><th class="right">Conversas</th><th class="right">R$/conv</th><th class="right hide-m">Leads no robô</th><th class="right">Qualificados</th><th class="right hide-m">R$/qualif.</th><th class="right">Pagos</th></tr></thead><tbody></tbody></table>
   <h2>Funil (todos os leads)</h2>
   <div class="grid" id="funil"></div>
+  <h2>Mercado de indicação</h2>
+  <div id="mercado" class="mut">carregando…</div>
   <h2>Leads</h2>
   <div class="filtros"><select id="fEtapa" onchange="render()"><option value="">Todas as etapas</option></select><select id="fTemp" onchange="render()"><option value="">Qualquer temperatura</option><option value="pronto">Prontos para advogado</option><option value="quente">Quentes</option><option value="morno">Mornos</option><option value="frio">Frios</option></select><select id="fRes" onchange="render()"><option value="">Qualquer triagem</option><option value="favoravel">Favorável</option><option value="desfavoravel">Desfavorável</option><option value="inconclusivo">Inconclusivo</option></select><input id="fBusca" placeholder="nome ou telefone" oninput="render()"></div>
   <table id="leads"><thead><tr><th>Lead</th><th>Temp.</th><th>Etapa</th><th class="hide-m">Triagem</th><th class="right">Renda</th><th class="right">% dívidas</th><th class="right hide-m">Sobra</th><th class="hide-m">Entrada</th><th class="nowrap">Última msg</th></tr></thead><tbody></tbody></table>
@@ -66,7 +68,7 @@ async function carregar() {
   if (!senha()) return;
   try { DADOS = await api('/resumo'); } catch (e) { $('#loginerr').textContent = e.message === 'senha' ? 'Senha inválida.' : 'Erro: ' + e.message; return; }
   $('#login').style.display = 'none'; $('#app').style.display = 'block'; $('#loginerr').textContent = '';
-  render(); clearInterval(timer); timer = setInterval(carregar, 30000);
+  render(); carregarMercado(); clearInterval(timer); timer = setInterval(carregar, 30000);
 }
 function tile(b, s, cls = '') { return `<div class="tile"><b class="${cls}">${b}</b><span>${s}</span></div>`; }
 function render() {
@@ -101,7 +103,7 @@ async function abrir(id) {
   let x; try { x = await api('/conversas/' + id); } catch (e) { $('#detbox').innerHTML = '<p class="bad">' + esc(e.message) + '</p>'; return; }
   const calc = x.triagem?.calculo; const dividas = x.triagem?.dividas || [];
   $('#detbox').innerHTML = `
-    <div class="bar"><button onclick="fechar()">← voltar</button><a class="chip" href="https://wa.me/${x.wa_id}" target="_blank">abrir no WhatsApp</a>${x.etapa !== 'handoff' ? `<button onclick="acao('${x.id}','assumir')">Assumir (Paula para)</button>` : ''}${['handoff', 'desistiu', 'encerrado', 'inviavel'].includes(x.etapa) ? `<button class="p" onclick="acao('${x.id}','retomar')">Devolver à Paula</button>` : ''}</div>
+    <div class="bar"><button onclick="fechar()">← voltar</button><a class="chip" href="https://wa.me/${x.wa_id}" target="_blank">abrir no WhatsApp</a>${x.etapa !== 'handoff' ? `<button onclick="acao('${x.id}','assumir')">Assumir (Paula para)</button>` : ''}${['handoff', 'desistiu', 'encerrado', 'inviavel'].includes(x.etapa) ? `<button class="p" onclick="acao('${x.id}','retomar')">Devolver à Paula</button>` : ''}${['triagem', 'proposta', 'docs', 'desistiu', 'handoff', 'inviavel', 'encerrado', 'consentimento'].includes(x.etapa) ? `<button onclick="acao('${x.id}','oferecer')">Oferecer a advogados</button>` : ''}</div>
     <h2 style="margin-top:6px">${esc(x.nome) || '—'} · ${esc(x.telefone)}</h2>
     <p>${temp(x)} <span class="chip">${esc(x.rotulo)}</span> ${x.ad_id ? '<span class="chip">anúncio ' + esc(x.ad_id) + '</span>' : ''} <span class="mut">chegou ${dt(x.criado_em)}</span></p>
     ${x.handoff_motivo ? `<p class="warn"><b>Motivo do handoff:</b> ${esc(x.handoff_motivo)}</p>` : ''}
@@ -115,7 +117,14 @@ async function abrir(id) {
     <h2>Conversa</h2>
     ${x.mensagens.map(m => `<div class="msg ${m.direcao}">${esc(m.texto || '[' + m.tipo + ']')}<small>${m.direcao === 'in' ? 'lead' : 'Paula'} · ${dt(m.criado_em)}</small></div>`).join('')}`;
 }
-async function acao(id, a) { if (!confirm(a === 'retomar' ? 'Devolver esta conversa à Paula? Ela retoma em horário comercial.' : 'Assumir? A Paula para de responder esta pessoa.')) return; try { await api(`/conversas/${id}/${a}`, { method: 'POST' }); await carregar(); abrir(id); } catch (e) { alert(e.message); } }
+async function acao(id, a) { const perg = { retomar: 'Devolver esta conversa à Paula? Ela retoma em horário comercial.', assumir: 'Assumir? A Paula para de responder esta pessoa.', oferecer: 'Oferecer este lead aos advogados parceiros? A Paula pede o consentimento da pessoa; com o SIM, a oferta abre sozinha (1 h, lance mínimo R$ 500).' }[a]; if (!confirm(perg)) return; try { const r = await api(`/conversas/${id}/${a}`, { method: 'POST' }); if (r.aguardando_consentimento) alert('A Paula perguntou à pessoa. Quando ela responder SIM, a oferta abre e você vê aqui em "Mercado".'); await carregar(); abrir(id); } catch (e) { alert(e.message); } }
+async function acaoOferta(id, a) { if (!confirm(a === 'cancelar' ? 'Cancelar esta oferta? O lead volta à etapa anterior.' : 'Reabrir esta oferta por mais 1 h?')) return; try { await api(`/ofertas/${id}/${a}`, { method: 'POST' }); await carregarMercado(); } catch (e) { alert(e.message); } }
+async function carregarMercado() {
+  let m; try { m = await api('/ofertas'); } catch (e) { $('#mercado').innerHTML = '<p class="bad">' + esc(e.message) + '</p>'; return; }
+  const st = { aberta: 'warn', aguardando_pagamento: 'warn', vendida: 'ok', expirada: 'mut', cancelada: 'mut' };
+  $('#mercado').innerHTML = `<p class="mut">${m.advogados.length} advogado(s) cadastrado(s), ${m.advogados.filter(a => a.termo_aceito_em && a.ativo).length} com termo aceito · cadastro em <a href="/parceiros" target="_blank">/parceiros</a></p>` +
+    (m.ofertas.map(o => `<div class="tile" style="margin-bottom:8px"><span class="chip ${st[o.status] || ''}">${esc(o.status.replace('_', ' '))}</span> <b>${esc(o.lead?.nome || '')}</b> <span class="mut">${esc(o.lead?.telefone || '')}</span> · mínimo ${brl(o.preco_minimo)} · fecha ${dt(o.fecha_em)}${o.vencedor ? ` · <b>venceu ${esc(o.vencedor)}</b> por ${brl(o.lance_vencedor)}${o.pago_em ? ' · <span class="ok">pago</span>' : ' · aguardando pagamento até ' + dt(o.pagamento_ate)}` : ''}<br><small class="mut">${o.lances.length ? o.lances.map(l => `${brl(l.valor)} ${esc(l.advogado)}`).join(' · ') : 'sem lances'}</small><div class="bar">${['aberta', 'aguardando_pagamento'].includes(o.status) ? `<button onclick="acaoOferta('${o.id}','cancelar')">Cancelar</button>` : ''}${['expirada', 'cancelada'].includes(o.status) ? `<button onclick="acaoOferta('${o.id}','reabrir')">Reabrir</button>` : ''}</div></div>`).join('') || '<p class="mut">Nenhuma oferta ainda. Abra um lead e use "Oferecer a advogados".</p>');
+}
 function fechar() { $('#det').classList.remove('on'); }
 if (senha()) carregar(); else $('#login').style.display = 'block';
 </script>

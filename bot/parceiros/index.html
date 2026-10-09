@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parceiros · Indicação de casos</title>
+<style>
+  :root{--bg:#f5f6f8;--card:#fff;--ink:#1b1f24;--mut:#6b7280;--line:#e5e7eb;--acc:#0f5f8a;--ok:#15803d;--warn:#b45309;--bad:#b91c1c;--chip:#eef2ff}
+  @media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a21;--ink:#e7e9ee;--mut:#9aa3b2;--line:#2a2f3a;--chip:#1f2937;--acc:#6fb6dd}}
+  *{box-sizing:border-box} body{margin:0;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink);padding:16px 16px 60px}
+  main{max-width:900px;margin:0 auto} h1{font-size:20px;margin:0 0 4px} h2{font-size:14px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:22px 0 8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:10px 0}
+  .mut{color:var(--mut)} .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+  input,button,select{font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--ink);width:100%} button{cursor:pointer;width:auto} button.p{background:var(--acc);color:#fff;border-color:var(--acc)}
+  .grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))} label{display:block;font-size:13px;color:var(--mut);margin-bottom:4px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px} .chip{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--chip);font-size:12px}
+  .brief{white-space:pre-wrap;font-size:14px} .msg{max-width:88%;padding:8px 10px;border-radius:12px;margin:6px 0;white-space:pre-wrap;font-size:13px} .in{background:var(--chip);margin-right:auto} .out{background:#dcfce7;color:#14532d;margin-left:auto}
+  @media (prefers-color-scheme:dark){.out{background:#14532d;color:#dcfce7}} .msg small{display:block;color:var(--mut);font-size:11px;margin-top:3px}
+  details summary{cursor:pointer}
+</style>
+</head>
+<body><main>
+<div id="cad" style="display:none">
+  <h1>Advogados parceiros · casos de superendividamento</h1>
+  <p class="mut">Casos já qualificados por atendimento automatizado (renda, dívidas, comprometimento, documentos), com a pessoa autorizando o encaminhamento. Você vê o resumo sem identificação, dá seu lance a partir do valor mínimo e, pagando, recebe o contato e a conversa completa. A plataforma só indica: dali em diante o atendimento é seu.</p>
+  <div class="card">
+    <div class="grid">
+      <div><label>Nome completo</label><input id="c_nome"></div>
+      <div><label>OAB (número)</label><input id="c_oab" placeholder="123456"></div>
+      <div><label>UF da OAB</label><input id="c_uf" maxlength="2" placeholder="SP"></div>
+      <div><label>E-mail (recebe os casos e o seu acesso)</label><input id="c_email" type="email"></div>
+      <div><label>WhatsApp</label><input id="c_wpp" placeholder="11999998888"></div>
+      <div><label>CPF ou CNPJ (para a cobrança)</label><input id="c_doc"></div>
+      <div><label>Cidade</label><input id="c_cidade"></div>
+    </div>
+    <div class="row"><input type="checkbox" id="c_aceite" style="width:auto"><label for="c_aceite" style="margin:0">Li e aceito o <a href="/parceiros/termos" target="_blank">Termo de Adesão</a>: a plataforma só indica; a condução do caso, a ética profissional e os dados passam a ser de minha responsabilidade.</label></div>
+    <div class="row"><button class="p" onclick="cadastrar()">Cadastrar</button><span id="c_msg"></span></div>
+  </div>
+</div>
+<div id="app" style="display:none">
+  <h1>Parceiro: <span id="eu"></span></h1>
+  <p class="mut" id="sub"></p>
+  <h2>Casos abertos</h2>
+  <div id="ofertas"></div>
+  <h2>Meus casos</h2>
+  <div id="casos"></div>
+</div>
+<script>
+const $=(s)=>document.querySelector(s);
+const brl=(n)=>n==null?'—':'R$ '+Number(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const dt=(s)=>s?new Date(s).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+const esc=(t)=>String(t??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function token(){ const u=new URL(location.href).searchParams.get('t'); if(u){try{localStorage.setItem('parceiro_t',u)}catch{} history.replaceState(null,'',location.pathname);} try{return localStorage.getItem('parceiro_t')||''}catch{return ''} }
+async function api(p,opt={}){const r=await fetch('/parceiros/api'+p,{...opt,headers:{'x-parceiro':token(),'Content-Type':'application/json',...(opt.headers||{})}});const j=await r.json();if(!r.ok)throw new Error(j.erro||r.status);return j;}
+async function cadastrar(){
+  $('#c_msg').textContent='enviando…';
+  try{const j=await fetch('/parceiros/api/cadastro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome:$('#c_nome').value,oab:$('#c_oab').value,uf:$('#c_uf').value,email:$('#c_email').value,whatsapp:$('#c_wpp').value,cpf_cnpj:$('#c_doc').value,cidade:$('#c_cidade').value,aceite:$('#c_aceite').checked})}).then(async r=>{const j=await r.json();if(!r.ok)throw new Error(j.erro||r.status);return j;});
+    if(j.token){try{localStorage.setItem('parceiro_t',j.token)}catch{} $('#c_msg').textContent='Cadastro feito. Entrando…'; carregar();}
+    else $('#c_msg').innerHTML='<span class="ok">Cadastro feito. Seu link de acesso foi enviado por e-mail.</span>';
+  }catch(e){$('#c_msg').innerHTML='<span class="bad">'+esc(e.message)+'</span>';}
+}
+function briefHtml(b){
+  const d=(b.dividas||[]).map(x=>`• ${esc(x.credor||'credor')} · ${esc(x.tipo||'')} · ${brl(x.parcela)}/mês · saldo ${brl(x.saldo)}`).join('\n');
+  return `<div class="brief">${[b.regiao?'Região: '+esc(b.regiao):'',b.fonte_renda?'Renda: '+esc(b.fonte_renda):'',b.renda!=null?`Renda líquida ${brl(b.renda)} · parcelas ${brl(b.parcelas)} (${b.pct}%) · sobra ${brl(b.sobra)}`:'',b.credores!=null?`${b.credores} credor(es) · saldo aprox. ${brl(b.saldo)}`:'',d,b.indicativo?'Indicativo da triagem: '+esc(b.indicativo):'',b.preferencia_pagamento?'Preferência de honorários: '+esc(b.preferencia_pagamento):'',b.documentos?`${b.documentos} documento(s) já recebidos`:'',b.resumo?'\n'+esc(b.resumo):''].filter(Boolean).join('\n')}</div>`;
+}
+let EU=null;
+async function carregar(){
+  if(!token()){$('#cad').style.display='block';return;}
+  try{EU=await api('/eu');}catch(e){try{localStorage.removeItem('parceiro_t')}catch{} $('#cad').style.display='block';return;}
+  $('#cad').style.display='none';$('#app').style.display='block';
+  $('#eu').textContent=EU.nome;$('#sub').textContent=`OAB/${EU.uf} ${EU.oab} · ${EU.email} · termo aceito em ${dt(EU.termo_aceito_em)}`;
+  const v=await api('/visao');
+  $('#ofertas').innerHTML=v.ofertas.map(o=>`<div class="card">
+    <div class="row" style="margin-top:0"><span class="chip">${o.status==='aberta'?'aberta até '+dt(o.fecha_em):'encerrada · aguardando pagamento'}</span><span class="chip">mínimo ${brl(o.preco_minimo)}</span><span class="chip">${o.lances} lance(s)${o.maior_lance?' · maior '+brl(o.maior_lance):''}</span>${o.meu_lance?`<span class="chip ${o.lidero?'ok':'warn'}">seu lance ${brl(o.meu_lance)} ${o.lidero?'(liderando)':'(superado)'}</span>`:''}</div>
+    ${briefHtml(o.brief)}
+    ${o.status==='aberta'?`<div class="row"><input id="l_${o.id}" type="number" step="50" min="${o.minimo_proximo}" value="${o.minimo_proximo}" style="max-width:160px"><button class="p" onclick="lance('${o.id}')">Dar lance</button><span id="m_${o.id}" class="mut">mínimo agora ${brl(o.minimo_proximo)}</span></div>`:''}
+    ${o.sou_vencedor&&o.url_pagamento?`<div class="row"><b class="ok">Você venceu.</b> Pague até ${dt(o.pagamento_ate)} para receber o contato: <a href="${esc(o.url_pagamento)}" target="_blank">abrir cobrança</a></div>`:''}
+  </div>`).join('')||'<p class="mut">Nenhum caso aberto agora. Você recebe um e-mail quando abrir.</p>';
+  $('#casos').innerHTML=v.casos.map(c=>`<div class="card"><b>${esc(c.nome||'')}</b> · ${esc(c.telefone)} · <a href="https://wa.me/${c.wa_id}" target="_blank">WhatsApp</a> <span class="mut">· pago ${brl(c.valor)} em ${dt(c.pago_em)}</span>
+    ${briefHtml(c.brief)}
+    <details><summary>Conversa completa (${c.mensagens.length} mensagens)</summary>${c.mensagens.map(m=>`<div class="msg ${m.direcao}">${esc(m.texto||'['+m.tipo+']')}<small>${m.direcao==='in'?'cliente':'assistente'} · ${dt(m.criado_em)}</small></div>`).join('')}</details>
+  </div>`).join('')||'<p class="mut">Nenhum caso adquirido ainda.</p>';
+}
+async function lance(id){const v=Number($('#l_'+id).value);$('#m_'+id).textContent='enviando…';try{const r=await api('/ofertas/'+id+'/lance',{method:'POST',body:JSON.stringify({valor:v})});$('#m_'+id).innerHTML='<span class="ok">lance registrado</span>';carregar();}catch(e){$('#m_'+id).innerHTML='<span class="bad">'+esc(e.message)+'</span>';}}
+carregar(); setInterval(()=>{ if(EU) carregar(); },30000);
+</script>
+</main></body>
+</html>

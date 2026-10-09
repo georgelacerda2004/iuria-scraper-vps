@@ -16,6 +16,12 @@ export const MSG = {
   handoff: `Entendi. Vou passar a sua conversa para a equipe. Um advogado continua daqui em horário comercial.`,
   midia: `Recebi o arquivo, obrigado! Nesta primeira conversa não preciso de documentos ainda. Me responde por texto, por favor.`,
   erroIA: `Tive um problema aqui do meu lado. Pode repetir a última mensagem?`,
+  // Mercado de indicação (consentimento específico, LGPD).
+  pedirIndicacao: (nome) => `${nome ? nome.split(' ')[0] + ', u' : 'U'}ma pergunta importante. Além do nosso escritório, eu posso encaminhar o seu caso para um advogado parceiro cadastrado na nossa plataforma, para ele te chamar e dar andamento? Ele receberia o que você me contou aqui e o seu telefone, só para esse atendimento.\n\nResponda *SIM* para autorizar ou *NÃO* para deixar como está.`,
+  indicacaoOk: `Combinado, obrigada! Vou encaminhar o seu caso. Assim que um advogado parceiro assumir, eu te aviso por aqui com o nome e a OAB dele.`,
+  indicacaoNao: `Tudo bem, fica como está. Seguimos por aqui.`,
+  emOferta: `Seu caso está sendo encaminhado para um advogado parceiro. Assim que ele assumir, eu te aviso por aqui com o nome e a OAB. Se preferir desistir disso, escreva *cancelar indicação*.`,
+  indicado: `Seu caso já está com o advogado parceiro que eu te informei. Fale direto com ele. Se tiver algum problema para falar com ele, escreva *problema com o advogado* que a equipe verifica.`,
 };
 
 const RE_SIM = /^\s*(sim|s|ok|concordo|aceito|pode)\b/i;
@@ -33,6 +39,21 @@ export async function proximoPasso(conversa, ev, opts = {}) {
   if (RE_HUMANO.test(texto)) return { respostas: [MSG.handoff], patch: { etapa: 'handoff', handoff_em: new Date().toISOString() } };
   if (etapa === 'handoff') return { respostas: [], patch: {} }; // humano assumiu; robô fica quieto
   if (etapa === 'encerrado') return { respostas: [MSG.boasVindas(ev.nome)], patch: { etapa: 'consentimento' } };
+
+  // Mercado de indicação: consentimento expresso antes de oferecer o caso a um advogado parceiro.
+  if (etapa === 'consentimento_indicacao') {
+    if (RE_SIM.test(texto)) return { respostas: [MSG.indicacaoOk], patch: { consentimento_indicacao_em: new Date().toISOString(), etapa: 'em_oferta' }, oferecer: true };
+    if (RE_SAIR.test(texto)) return { respostas: [MSG.indicacaoNao], patch: { etapa: conversa.etapa_anterior || 'triagem', etapa_anterior: null } };
+    return { respostas: [MSG.pedirIndicacao(conversa.nome_perfil || ev.nome)], patch: {} };
+  }
+  if (etapa === 'em_oferta') {
+    if (/cancelar/i.test(texto)) return { respostas: [MSG.indicacaoNao], patch: { etapa: conversa.etapa_anterior || 'triagem', consentimento_indicacao_em: null }, cancelarOferta: true };
+    return { respostas: [MSG.emOferta], patch: {} };
+  }
+  if (etapa === 'indicado') {
+    if (/problema/i.test(texto)) return { respostas: [MSG.handoff], patch: { etapa: 'handoff', handoff_em: new Date().toISOString(), handoff_motivo: 'cliente indicado relata problema com o advogado parceiro' } };
+    return { respostas: [MSG.indicado], patch: {} };
+  }
 
   if (etapa === 'novo') return { respostas: [MSG.boasVindas(ev.nome)], patch: { etapa: 'consentimento' } };
 
