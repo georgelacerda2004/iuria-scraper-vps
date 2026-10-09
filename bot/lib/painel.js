@@ -84,8 +84,18 @@ export function montarRouter({ senha = process.env.PAINEL_SENHA } = {}) {
   r.get('/', (_req, res) => res.sendFile(path.join(AQUI, '..', 'painel', 'index.html')));
   r.use('/api', (req, res, next) => {
     if (!senha) return res.status(503).json({ erro: 'PAINEL_SENHA não definida no Render' });
-    if (req.get('x-painel') !== senha) return res.status(401).json({ erro: 'senha inválida' });
+    // A senha vai no header; a rota da petição aceita ?senha= para abrir numa aba do navegador.
+    if (req.get('x-painel') !== senha && !(req.path.startsWith('/peticao/') && req.query.senha === senha)) return res.status(401).json({ erro: 'senha inválida' });
     next();
+  });
+  // Petição gerada (HTML pronto para imprimir/exportar em PDF) de uma entrevista do IURIA.
+  r.get('/api/peticao/:entrevistaId', async (req, res) => {
+    try {
+      const s = db(); if (!s) return res.status(503).json({ erro: 'sem banco' });
+      const { data } = await s.from('inicial_entrevistas').select('status,peticao_html').eq('id', req.params.entrevistaId).maybeSingle();
+      if (!data?.peticao_html) return res.status(404).json({ erro: data ? `petição ainda não gerada (status ${data.status})` : 'não achei' });
+      res.type('html').send(data.peticao_html);
+    } catch (e) { res.status(500).json({ erro: e.message }); }
   });
   r.get('/api/resumo', async (_req, res) => {
     try {
@@ -116,7 +126,7 @@ export function montarRouter({ senha = process.env.PAINEL_SENHA } = {}) {
       let processo = null, distribuicao = null;
       if (c.processo_id) {
         const { data: p } = await s.from('processos').select('numero,status_processo,fase,tribunal,vara,comarca').eq('id', c.processo_id).maybeSingle(); processo = p;
-        const { data: d } = await s.from('distribuicoes').select('id,status,valor_causa,created_at').eq('processo_id', c.processo_id).order('created_at', { ascending: false }).limit(1).maybeSingle(); distribuicao = d;
+        const { data: d } = await s.from('distribuicoes').select('id,status,valor_causa,created_at,entrevista_id').eq('processo_id', c.processo_id).order('created_at', { ascending: false }).limit(1).maybeSingle(); distribuicao = d;
       }
       const plano = projetarPlano(c.triagem || {});
       const checklist = checklistFechamento({ conversa: c, assinaturas, processo, distribuicao });

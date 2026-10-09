@@ -134,7 +134,7 @@ async function abrir(id) {
         <tr><td>Saldo das dívidas / valor da causa</td><td class="right">${brl(x.plano.saldo)}</td><td class="right">${brl(x.plano.total_no_plano)} no plano${x.plano.cabe_no_prazo ? '' : ' <span class="bad">(não cobre o saldo)</span>'}</td></tr></table>
         <p class="mut" style="font-size:12px">Liminar: ${esc(x.plano.pedidos.liminar)}. ${esc(x.plano.aviso)}</p>` : ''}
       <ul style="columns:2;column-gap:16px;padding-left:18px;font-size:13px">${x.checklist.itens.map(i => `<li class="${i.feito ? 'ok' : 'mut'}">${i.feito ? '✔' : '○'} ${esc(i.rotulo)}${i.detalhe ? ` <small>· ${esc(i.detalhe)}</small>` : ''}</li>`).join('')}</ul>
-      ${x.distribuicao ? `<p><b>Petição no IURIA:</b> distribuição em rascunho (${esc(String(x.distribuicao.id).slice(0, 8))}) · valor da causa ${brl(x.distribuicao.valor_causa)} · ${dt(x.distribuicao.created_at)}</p>` : ''}
+      ${x.distribuicao ? `<p><b>Petição no IURIA:</b> distribuição em rascunho (${esc(String(x.distribuicao.id).slice(0, 8))}) · valor da causa ${brl(x.distribuicao.valor_causa)} · ${dt(x.distribuicao.created_at)}${x.distribuicao.entrevista_id ? ` · <a href="/painel/api/peticao/${esc(x.distribuicao.entrevista_id)}?senha=${encodeURIComponent(senha())}" target="_blank">abrir petição</a>` : ''}</p>` : ''}
     </div>` : ''}
     ${x.resumo ? `<p><b>Resumo da Paula:</b> ${esc(x.resumo)}</p>` : ''}
     ${calc ? `<p><b>Medição:</b> renda ${brl(calc.renda_liquida)} · parcelas ${brl(calc.parcelas_mensais_consideradas)} (${calc.percentual_renda_comprometido}%) · sobra ${brl(calc.sobra_mensal)} vs mínimo ${brl(calc.minimo_existencial)} · ${calc.credores_considerados} credor(es) · saldo ${brl(calc.saldo_total_considerado)} · indicativo <b>${esc(calc.indicativo)}</b></p>` : ''}
