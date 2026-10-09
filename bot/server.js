@@ -10,7 +10,7 @@ import { EVENTOS_PAGO } from './lib/asaas.js';
 import { db } from './lib/db.js';
 import { ciclo as cicloCampanha } from './lib/campanha.js';
 import { avisarOperador, buscarCliente, criarEntrevista } from './lib/iuria.js';
-import { prepararProtocolo } from './lib/peticao.js';
+import { prepararProtocolo, entrevistaGerada } from './lib/peticao.js';
 import { montarBriefing } from './lib/briefing.js';
 import { rodar as rodarFollowups, horaComercial } from './lib/followup.js';
 import { responder } from './lib/cerebro.js';
@@ -135,6 +135,15 @@ async function retentarPeticoes() {
     try {
       const cliente = await buscarCliente(c.cliente_id);
       if (!cliente) throw new Error('cliente não encontrado');
+      // A edge pode ter gerado a peça numa tentativa anterior (resposta cortada pelo gateway): usa essa.
+      const pronta = await entrevistaGerada(c.processo_id);
+      if (pronta) {
+        const r = await prepararProtocolo({ conversa: c, cliente, processoId: c.processo_id, entrevistaId: pronta.id, escritorioId: process.env.ESCRITORIO_ID, historicoTexto: '', deps: { pecaPronta: { viabilidade: pronta.viabilidade_analise, documentos: pronta.documentos_necessarios, preco: null } } });
+        await atualizarConversa(c.id, { triagem: { ...triagem, peticao_tentativas: tent + 1, peticao_erro: null } });
+        await avisarOperador(`PETIÇÃO PRONTA PARA REVISÃO — ${cliente.nome}\nDistribuição em rascunho (${r.distribuicaoId || 'sem id'}) no IURIA. Falta: exportar o PDF da petição, completar CNPJ dos credores e assinar com o A3.${r.viabilidade?.fundamento_resumo ? '\nViabilidade (IA): ' + r.viabilidade.fundamento_resumo : ''}`);
+        console.log('[peticao] distribuição montada com peça já gerada:', c.wa_id);
+        continue;
+      }
       // A primeira tentativa usa o histórico inteiro; as seguintes encurtam o contexto e usam o modelo rápido,
       // porque a edge gerar-inicial tem limite de tempo (504 quando o texto é longo).
       const historico = await carregarHistorico(c.id, tent === 0 ? 120 : 30);

@@ -249,6 +249,10 @@ assert.equal(dist.partes.passivo[0].nome, 'Banco A'); assert.equal(dist.valor_ca
 let inserido = null, payloadGerar = null;
 const pp = await prepararProtocolo({ conversa: { triagem: { ...triagemFake, documentos: { pessoal: { path: 'se-uploads/c1/pessoal.jpg', mime: 'image/jpeg' } } } }, cliente: clienteFake, processoId: 'p1', entrevistaId: 'e1', escritorioId: 'esc-1', historicoTexto: '', deps: { gerar: async (x) => { payloadGerar = x; return { html: '<html>', viabilidade: { tem_direito: true }, preco: 1.2 }; }, inserir: async (l) => { inserido = l; return 'dist-9'; } } });
 assert.equal(pp.distribuicaoId, 'dist-9'); assert.equal(inserido.anexos.length, 1); assert.equal(payloadGerar.anexos[0].storage_path, 'se-uploads/c1/pessoal.jpg');
+// peça já gerada por tentativa anterior (gateway 504): não chama gerar, só monta a distribuição
+let gerouDeNovo = false;
+const pp2 = await prepararProtocolo({ conversa: { triagem: triagemFake }, cliente: clienteFake, processoId: 'p1', entrevistaId: 'e-gerada', escritorioId: 'esc-1', historicoTexto: '', deps: { gerar: async () => { gerouDeNovo = true; }, inserir: async () => 'dist-10', pecaPronta: { viabilidade: { tem_direito: true }, preco: null } } });
+assert.equal(pp2.distribuicaoId, 'dist-10'); assert.equal(gerouDeNovo, false); assert.equal(pp2.viabilidade.tem_direito, true);
 
 // --- campanha: regras de decisão e relatório ---
 const { decidir, relatorio: relCamp } = await import('../lib/campanha.js');

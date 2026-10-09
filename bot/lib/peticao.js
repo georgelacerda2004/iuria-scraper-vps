@@ -50,8 +50,35 @@ export async function gerarPeticao({ cliente, triagem, entrevistaId, anexos = []
     body: JSON.stringify(payload), signal: AbortSignal.timeout(200_000),
   });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok || j.error) throw new Error(`[peticao] gerar-inicial: ${j.error || `HTTP ${r.status}`}`);
+  if (!r.ok || j.error) {
+    // O gateway corta em 150 s, mas a edge continua e grava a peça em inicial_entrevistas: espera por ela.
+    if (r.status === 504 || r.status === 502 || r.status === 524) {
+      const pronta = await esperarPecaGerada(entrevistaId);
+      if (pronta) return pronta;
+    }
+    throw new Error(`[peticao] gerar-inicial: ${j.error || `HTTP ${r.status}`}`);
+  }
   return { html: j.html, viabilidade: j.viabilidade, documentos: j.documentos_necessarios, preco: j.preco };
+}
+
+// Lê a peça já gravada pela edge (status 'gerada'), esperando até ~4 min.
+export async function esperarPecaGerada(entrevistaId, { tentativas = 16, intervaloMs = 15_000 } = {}) {
+  const s = db();
+  if (!s || !entrevistaId) return null;
+  for (let i = 0; i < tentativas; i++) {
+    const { data } = await s.from('inicial_entrevistas').select('status,peticao_html,viabilidade_analise,documentos_necessarios').eq('id', entrevistaId).maybeSingle();
+    if (data?.status === 'gerada' && data.peticao_html) return { html: data.peticao_html, viabilidade: data.viabilidade_analise, documentos: data.documentos_necessarios, preco: null };
+    await new Promise(res => setTimeout(res, intervaloMs));
+  }
+  return null;
+}
+
+// Entrevista deste processo que já tem a peça gerada (de uma tentativa anterior), se houver.
+export async function entrevistaGerada(processoId) {
+  const s = db();
+  if (!s || !processoId) return null;
+  const { data } = await s.from('inicial_entrevistas').select('id,viabilidade_analise,documentos_necessarios').eq('processo_id', processoId).eq('status', 'gerada').not('peticao_html', 'is', null).order('created_at', { ascending: true }).limit(1).maybeSingle();
+  return data || null;
 }
 
 // Linha de `distribuicoes` no mesmo formato que o IURIA já usa (ver registros reais do TJSP).
@@ -95,7 +122,8 @@ export async function prepararProtocolo({ conversa, cliente, processoId, entrevi
     }
   }
   const gerar = deps.gerar || gerarPeticao;
-  const pet = await gerar({ cliente, triagem, entrevistaId, anexos: anexos.filter(a => a.tipo !== 'Procuração'), historicoTexto, modelo });
+  // Peça já gerada numa tentativa anterior: não gera de novo, só monta a distribuição.
+  const pet = deps.pecaPronta || await gerar({ cliente, triagem, entrevistaId, anexos: anexos.filter(a => a.tipo !== 'Procuração'), historicoTexto, modelo });
   const linha = montarDistribuicao({ cliente, processoId, entrevistaId, triagem, escritorioId, criadoPor: cliente.criado_por, anexos });
   let distribuicaoId = null;
   if (deps.inserir) distribuicaoId = await deps.inserir(linha);
