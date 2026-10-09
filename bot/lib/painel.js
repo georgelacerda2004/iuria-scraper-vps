@@ -140,6 +140,21 @@ export function montarRouter({ senha = process.env.PAINEL_SENHA } = {}) {
     try {
       const { acao } = req.params;
       if (acao === 'retomar') await atualizarConversa(req.params.id, { etapa: 'retomar' });
+      else if (acao === 'mensagem') {
+        // Envia na hora como Paula; se o WhatsApp recusar (janela de 24 h fechada), deixa na fila do robô.
+        const texto = String(req.body?.texto || '').trim();
+        if (!texto) return res.status(400).json({ erro: 'texto vazio' });
+        const s = db(); const { data: c } = await s.from('se_conversas').select('*').eq('id', req.params.id).maybeSingle();
+        if (!c) return res.status(404).json({ erro: 'não achei' });
+        try {
+          const out = await sendText(c.wa_id, texto);
+          await gravarMensagem({ conversaId: c.id, waId: c.wa_id, direcao: 'out', tipo: 'text', texto, waMessageId: out?.messages?.[0]?.id });
+          return res.json({ ok: true, enviada: true });
+        } catch (e) {
+          await atualizarConversa(c.id, { triagem: { ...(c.triagem || {}), mensagem_operador: texto } });
+          return res.json({ ok: true, enviada: false, motivo: e.message });
+        }
+      }
       else if (acao === 'assumir') await atualizarConversa(req.params.id, { etapa: 'handoff', handoff_em: new Date().toISOString(), handoff_motivo: 'assumido pelo painel' });
       else if (acao === 'oferecer') {
         const s = db(); const { data: c } = await s.from('se_conversas').select('*').eq('id', req.params.id).maybeSingle();

@@ -11,6 +11,7 @@ import { db } from './lib/db.js';
 import { ciclo as cicloCampanha } from './lib/campanha.js';
 import { avisarOperador, buscarCliente, criarEntrevista } from './lib/iuria.js';
 import { prepararProtocolo, entrevistaGerada } from './lib/peticao.js';
+import { aplicarCorrecoes } from './lib/correcoes.js';
 import { montarBriefing } from './lib/briefing.js';
 import { rodar as rodarFollowups, horaComercial } from './lib/followup.js';
 import { responder } from './lib/cerebro.js';
@@ -114,11 +115,34 @@ async function verificarPendencias() {
     try { await checarConversa(c); } catch (e) { console.error('[pendencias]', c.wa_id, e.message); }
   }
   await recuperarCadastros();
+  await enviarMensagensOperador();
   await retomarConversas();
   await reemitirPendentes();
   await confirmarPagamentosOfertas().catch(e => console.error('[mercado]', e.message));
 }
 if (process.env.NODE_ENV !== 'test') setInterval(() => fecharOfertas().then(n => n && console.log(`[mercado] ${n} oferta(s) fechada(s)`)).catch(e => console.error('[mercado]', e.message)), 60_000);
+
+// Mensagem escrita pelo operador (painel ou triagem.mensagem_operador no banco): a Paula envia como se fosse dela
+// e grava no histórico. Se o WhatsApp recusar (fora da janela de 24 h), fica registrado o erro para o painel.
+async function enviarMensagensOperador() {
+  const s = db();
+  if (!s) return;
+  const { data } = await s.from('se_conversas').select('*').not('triagem->>mensagem_operador', 'is', null).limit(20);
+  for (const c of data || []) {
+    const texto = String(c.triagem?.mensagem_operador || '').trim();
+    const { mensagem_operador, ...resto } = c.triagem || {};
+    if (!texto) { await atualizarConversa(c.id, { triagem: resto }).catch(() => {}); continue; }
+    try {
+      const out = await sendText(c.wa_id, texto);
+      await gravarMensagem({ conversaId: c.id, waId: c.wa_id, direcao: 'out', tipo: 'text', texto, waMessageId: out?.messages?.[0]?.id });
+      await atualizarConversa(c.id, { triagem: { ...resto, mensagem_operador_enviada_em: new Date().toISOString() } });
+      console.log('[operador] mensagem enviada:', c.wa_id);
+    } catch (e) {
+      console.warn('[operador] mensagem não entregue:', c.wa_id, e.message);
+      await atualizarConversa(c.id, { triagem: { ...resto, mensagem_operador_erro: e.message } }).catch(() => {});
+    }
+  }
+}
 
 // Clientes com processo criado mas sem distribuição em rascunho (a geração da petição falhou, ex.: timeout da IA):
 // tenta de novo até 3 vezes, criando a entrevista se faltar. Nunca protocola.
@@ -245,7 +269,8 @@ if (process.env.NODE_ENV !== 'test') setInterval(() => verificarPendencias().cat
 if (process.env.NODE_ENV !== 'test') {
   setInterval(() => rodarFollowups().then(n => n && console.log(`[followup] ${n} retomada(s) enviada(s)`)).catch(e => console.error('[followup]', e.message)), 10 * 60_000);
   setInterval(() => rodarPos().then(r => (r.protocolos || r.andamentos) && console.log(`[pos] ${r.protocolos} protocolo(s), ${r.andamentos} andamento(s) avisados`)).catch(e => console.error('[pos]', e.message)), 15 * 60_000);
-  setTimeout(() => retentarPeticoes().catch(e => console.error('[peticao]', e.message)), 90_000);
+  setTimeout(() => aplicarCorrecoes().catch(e => console.error('[correcoes]', e.message)), 20_000);
+setTimeout(() => retentarPeticoes().catch(e => console.error('[peticao]', e.message)), 90_000);
   setInterval(() => retentarPeticoes().catch(e => console.error('[peticao]', e.message)), 15 * 60_000);
   if (process.env.WHATSAPP_TEMPLATES !== 'off') {
     setTimeout(() => sincronizarTemplates().catch(e => console.error('[templates]', e.message)), 30_000);

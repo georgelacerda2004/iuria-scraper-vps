@@ -2,6 +2,7 @@
 // Regra da casa: o robô NUNCA protocola. Ele deixa a entrevista "gerada" e a distribuição em
 // 'rascunho' com tudo preenchido; o George revisa, completa CNPJ dos credores e assina com o A3.
 import { db } from './db.js';
+import { qualificarCredores } from './credores.js';
 
 const SB_URL = () => (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
 const SB_SVC = () => process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -33,7 +34,16 @@ export function montarEntrevista({ cliente, triagem, historicoTexto = '' }) {
   return linhas.filter(Boolean).join('\n');
 }
 
-export async function gerarPeticao({ cliente, triagem, entrevistaId, anexos = [], historicoTexto = '', modelo }) {
+// Regras fixas do escritório para TODA petição (ordem do Dr. George, 09/10):
+// 1) nunca deixar campo em branco ("____"): réus qualificados com razão social, CNPJ e endereço da sede;
+// 2) valor da causa = soma dos VALORES TOTAIS dos contratos de consumo objeto da repactuação (não o saldo estimado).
+export const REGRAS_ESCRITORIO = [
+  'NUNCA deixe campo em branco, lacuna ou "____" em nenhuma parte da petição. Todo réu deve vir qualificado com razão social completa, CNPJ e endereço da sede. Use os dados em `credores_qualificados`; se um credor estiver marcado como pendente, use o nome como consta e escreva "(CNPJ e endereço a confirmar)" uma única vez, nunca traços.',
+  'VALOR DA CAUSA = soma dos VALORES TOTAIS dos contratos de consumo objeto da repactuação (valor total a pagar de cada contrato, conforme os anexos; se só houver o saldo informado pela pessoa, use o saldo). No capítulo do valor da causa, liste a composição por credor. Devolva o mesmo número em JSON_VIABILIDADE.valor_estimado_causa como "R$ 0.000,00".',
+  'Se a pessoa não assinou declaração de hipossuficiência, NÃO cite declaração anexa: peça a gratuidade com a declaração na própria petição (art. 99, § 3º, CPC).',
+];
+
+export async function gerarPeticao({ cliente, triagem, entrevistaId, anexos = [], historicoTexto = '', modelo, credores }) {
   const advogado = process.env.ADVOGADO_NOME && process.env.ADVOGADO_OAB ? `${process.env.ADVOGADO_NOME} — ${process.env.ADVOGADO_OAB}` : undefined;
   const cidade = cliente.cidade ? `${cliente.cidade}${cliente.uf ? '/' + cliente.uf : ''}` : (process.env.FORO_CONTRATO || 'São Paulo/SP');
   const payload = {
@@ -42,6 +52,9 @@ export async function gerarPeticao({ cliente, triagem, entrevistaId, anexos = []
     entrevista_id: entrevistaId,
     advogado_signatario: advogado,
     cidade, data_protocolo: `${cidade}, ${dataExtenso()}`,
+    regras_escritorio: REGRAS_ESCRITORIO,
+    credores_qualificados: (credores || []).map(c => ({ nome_informado: c.nome, razao_social: c.razao_social, cnpj: c.cnpj, endereco: c.endereco, pendente: !!c.pendente, fonte: c.fonte })),
+    hipossuficiencia_assinada: (triagem?.assinaturas || []).some(a => /hipossufici/i.test(a.nome || a.nomeDoc || '')),
     anexos: anexos.slice(0, 5),
     modelo_ia: modelo || process.env.PETICAO_MODELO || 'opus',
   };
@@ -82,7 +95,17 @@ export async function entrevistaGerada(processoId) {
 }
 
 // Linha de `distribuicoes` no mesmo formato que o IURIA já usa (ver registros reais do TJSP).
-export function montarDistribuicao({ cliente, processoId, entrevistaId, triagem, escritorioId, criadoPor, anexos = [] }) {
+// "R$ 38.946,00" | "38946" | 38946 -> 38946 (null quando não dá para ler)
+export function lerValor(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number') return isFinite(v) && v > 0 ? v : null;
+  const s = String(v).replace(/[^\d,.]/g, '');
+  if (!s) return null;
+  const n = s.includes(',') ? Number(s.replace(/\./g, '').replace(',', '.')) : Number(s);
+  return isFinite(n) && n > 0 ? n : null;
+}
+
+export function montarDistribuicao({ cliente, processoId, entrevistaId, triagem, escritorioId, criadoPor, anexos = [], credores = [], valorCausa }) {
   const c = triagem?.calculo || {};
   const end = (cliente.endereco || '');
   const m = end.match(/^(.*?),?\s*(?:n[ºo.]?\s*)?(\d+[A-Za-z]?)\s*(.*)$/);
@@ -91,16 +114,21 @@ export function montarDistribuicao({ cliente, processoId, entrevistaId, triagem,
     rg: cliente.rg || '', orgao_emissor: '', nacionalidade: cliente.nacionalidade || 'brasileiro(a)', estado_civil: cliente.estado_civil || '', profissao: cliente.profissao || '',
     logradouro: m ? m[1] : end, numero: m ? m[2] : '', complemento: m ? m[3].replace(/^[,\s-]+/, '') : '', bairro: cliente.bairro || '', cidade: cliente.cidade || '', uf: cliente.uf || '', cep: cliente.cep || '',
   }];
-  const passivo = (triagem?.dividas || []).map(d => ({ tipo_pessoa: 'PJ', nome: d.credor, cpf_cnpj: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '', cep: '' }));
+  const nomes = (triagem?.dividas || []).map(d => d.credor).filter(Boolean);
+  const passivo = (credores.length ? credores : nomes.map(n => ({ nome: n, razao_social: n, cnpj: '', endereco: '' }))).map(q => {
+    const em = (q.endereco || '').match(/^(.*?),\s*n[ºo.]?\s*([\d.]+[A-Za-z]?|s\/n[ºo]?)[,\s]*(.*?)(?:,\s*([^,]+)\/([A-Z]{2}))?(?:,\s*CEP\s*([\d-]+))?$/);
+    return { tipo_pessoa: 'PJ', nome: q.razao_social || q.nome, razao_social: q.razao_social || q.nome, cpf_cnpj: (q.cnpj || '').replace(/\D/g, ''), cnpj: (q.cnpj || '').replace(/\D/g, ''),
+      logradouro: em ? em[1] : (q.endereco || ''), numero: em ? em[2] : '', complemento: em ? (em[3] || '').replace(/^[,\s-]+|[,\s-]+$/g, '') : '', bairro: '', cidade: em ? (em[4] || '') : '', uf: em ? (em[5] || '') : '', cep: em ? (em[6] || '') : '', pendente: !!q.pendente };
+  });
   return {
     criado_por: criadoPor, escritorio_id: escritorioId, cliente_id: cliente.id, processo_id: processoId, entrevista_id: entrevistaId,
     tribunal: process.env.TRIBUNAL_PADRAO || 'TJSP', sistema: process.env.SISTEMA_PADRAO || 'eproc', grau: '1', area_direito: 'Consumidor', competencia: 'Cível',
     jurisdicao: cliente.cidade ? `Foro de ${cliente.cidade}` : null, comarca: null,
     classe_nome: 'Procedimento de Repactuação de Dívidas (Superendividamento)', assuntos: [{ nome: 'Superendividamento' }],
-    partes: { ativo, passivo }, valor_causa: c.saldo_total_considerado || null, justica_gratuita: true, segredo_justica: false, prioridade: false, tutela_liminar: true,
+    partes: { ativo, passivo }, valor_causa: lerValor(valorCausa) || c.saldo_total_considerado || null, justica_gratuita: true, segredo_justica: false, prioridade: false, tutela_liminar: true,
     anexos, status: 'rascunho',
     opcoes_adicionais: { lei_14289: false, juizo_digital: true, intervencao_mp: false, prioridade_idoso: false, prioridade_doenca: false, prioridade_crianca: false, prioridade_deficiencia: false, sem_interesse_conciliacao: false },
-    observacao: 'Gerada pelo robô WhatsApp Superendividamento. ANTES DE PROTOCOLAR: (1) exportar o PDF da petição pela entrevista e anexar; (2) completar CNPJ e endereço de cada credor no polo passivo; (3) juntar extratos/contratos das dívidas; (4) conferir valor da causa. O robô não protocola.',
+    observacao: 'Gerada pela Paula (robô WhatsApp Superendividamento). ANTES DE PROTOCOLAR: (1) exportar o PDF da petição pela entrevista e anexar; (2) conferir a qualificação dos réus' + (passivo.some(p => p.pendente) ? ' — ATENÇÃO: ' + passivo.filter(p => p.pendente).map(p => p.nome).join(', ') + ' sem CNPJ/endereço confirmados' : ' (CNPJ e endereço preenchidos pelo catálogo/pesquisa)') + '; (3) valor da causa = soma dos contratos; (4) assinar com o A3. O robô não protocola.',
   };
 }
 
@@ -122,9 +150,12 @@ export async function prepararProtocolo({ conversa, cliente, processoId, entrevi
     }
   }
   const gerar = deps.gerar || gerarPeticao;
+  // Réus qualificados (catálogo → internet) antes de gerar: a peça sai sem lacuna.
+  const qualificar = deps.qualificar || qualificarCredores;
+  const credores = await qualificar((triagem.dividas || []).map(d => d.credor).filter(Boolean)).catch(e => { console.warn('[peticao] qualificar credores:', e.message); return []; });
   // Peça já gerada numa tentativa anterior: não gera de novo, só monta a distribuição.
-  const pet = deps.pecaPronta || await gerar({ cliente, triagem, entrevistaId, anexos: anexos.filter(a => a.tipo !== 'Procuração'), historicoTexto, modelo });
-  const linha = montarDistribuicao({ cliente, processoId, entrevistaId, triagem, escritorioId, criadoPor: cliente.criado_por, anexos });
+  const pet = deps.pecaPronta || await gerar({ cliente, triagem, entrevistaId, anexos: anexos.filter(a => a.tipo !== 'Procuração'), historicoTexto, modelo, credores });
+  const linha = montarDistribuicao({ cliente, processoId, entrevistaId, triagem, escritorioId, criadoPor: cliente.criado_por, anexos, credores, valorCausa: pet?.viabilidade?.valor_estimado_causa });
   let distribuicaoId = null;
   if (deps.inserir) distribuicaoId = await deps.inserir(linha);
   else if (s) {

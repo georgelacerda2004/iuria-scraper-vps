@@ -1,0 +1,171 @@
+{
+ "peticoes": [
+  {
+   "entrevista_id": "690bc1fc-465d-4feb-8c8a-7d0956436f6f",
+   "trocas": [
+    [
+     "BANCO PINE S.A., instituição financeira, pessoa jurídica de direito privado, credora do contrato nº 000000002813320, cujo endereço e inscrição no CNPJ deverão ser complementados antes da citação;",
+     "BANCO PINE S.A., instituição financeira, inscrita no CNPJ sob o nº 62.144.175/0001-20, com sede na Avenida Presidente Juscelino Kubitschek, nº 1.830, Torre 4, 6º andar, Itaim Bibi, São Paulo/SP, CEP 04543-900, credora do contrato nº 000000002813320;"
+    ],
+    [
+     "<p>Dá-se à causa o valor de R$ 6.900,00 (seis mil e novecentos reais), correspondente ao saldo total aproximado das dívidas de consumo objeto da repactuação pretendida.</p>",
+     "<p>Dá-se à causa o valor de R$ 38.946,00 (trinta e oito mil, novecentos e quarenta e seis reais), correspondente à soma dos valores totais dos contratos de consumo objeto da repactuação: R$ 22.940,16 (Facta Financeira), R$ 5.936,76 (All In Cred), R$ 3.975,48 (321 Sociedade de Crédito Direto) e R$ 6.093,60 (Banco Pine).</p>"
+    ]
+   ]
+  },
+  {
+   "entrevista_id": "fccbf9df-c196-4768-a9cc-6236022a61fa",
+   "trocas": [
+    [
+     "<p>BANCO SANTANDER (BRASIL) S.A., instituição financeira, inscrita no CNPJ sob o nº ____________, com endereço em ____________; BANCO BRADESCO S.A., instituição financeira, inscrita no CNPJ sob o nº ____________, com endereço em ____________; COOPERATIVA DE CRÉDITO — SICOOB/COOPERSERV, inscrita no CNPJ sob o nº ____________, com endereço em ____________; e NU FINANCEIRA S.A. — SOCIEDADE DE CRÉDITO, FINANCIAMENTO E INVESTIMENTO (NUBANK), inscrita no CNPJ sob o nº ____________, com endereço em ____________, pelas razões de fato e de direito a seguir expostas.</p>",
+     "<p>BANCO SANTANDER (BRASIL) S.A., instituição financeira, inscrita no CNPJ sob o nº 90.400.888/0001-42, com sede na Avenida Presidente Juscelino Kubitschek, nº 2.041 e 2.235, Bloco A, Vila Olímpia, São Paulo/SP, CEP 04543-011; BANCO BRADESCO S.A., instituição financeira, inscrita no CNPJ sob o nº 60.746.948/0001-12, com sede no Núcleo Cidade de Deus, s/nº, Vila Yara, Osasco/SP, CEP 06029-900; COOPERATIVA DE ECONOMIA E CRÉDITO MÚTUO — COOPERSERV (SICOOB COOPERSERV), inscrita no CNPJ sob o nº 05.667.301/0001-97, com sede na Avenida Brasil, nº 830, Centro, Lençóis Paulista/SP, CEP 18682-060; e NU PAGAMENTOS S.A. — INSTITUIÇÃO DE PAGAMENTO (NUBANK), inscrita no CNPJ sob o nº 18.236.120/0001-58, com sede na Rua Capote Valente, nº 39, Pinheiros, São Paulo/SP, CEP 05409-000, pelas razões de fato e de direito a seguir expostas.</p>"
+    ],
+    [
+     "nos termos do art. 98 e seguintes do Código de Processo Civil, ante a declaração de hipossuficiência anexada;",
+     "nos termos do art. 98 e seguintes do Código de Processo Civil, declarando a Autora, nesta própria petição e sob as penas da lei, não possuir condições de arcar com as custas processuais e os honorários advocatícios sem prejuízo do próprio sustento (art. 99, § 3º, do CPC);"
+    ],
+    [
+     "demonstrativo de pagamento referente a 09/2026, declaração de superendividamento e declaração de hipossuficiência)",
+     "demonstrativo de pagamento referente a 09/2026 e declaração de superendividamento)"
+    ],
+    [
+     "<p>Dá-se à causa o valor de R$ 8.000,00 (oito mil reais), correspondente ao montante aproximado do passivo objeto de repactuação até o momento apurado, ressalvada a ulterior adequação após a apresentação dos saldos devedores pelas Rés.</p>",
+     "<p>Dá-se à causa o valor de R$ 8.000,00 (oito mil reais), correspondente à soma dos valores dos contratos de consumo objeto da repactuação até aqui apurados (cartões de crédito Bradesco e Nubank), ressalvada a adequação após a juntada dos instrumentos dos empréstimos consignados mantidos com Santander, Bradesco e Cooperserv.</p>"
+    ]
+   ]
+  }
+ ],
+ "distribuicoes": [
+  {
+   "id": "220cbdea-c36e-4115-bc77-3681c62998ca",
+   "valor_causa": 38946,
+   "passivo": [
+    {
+     "tipo_pessoa": "PJ",
+     "nome": "BANCO PINE S.A.",
+     "razao_social": "BANCO PINE S.A.",
+     "cpf_cnpj": "62144175000120",
+     "cnpj": "62144175000120",
+     "logradouro": "Avenida Presidente Juscelino Kubitschek",
+     "numero": "1830",
+     "complemento": "Torre 4, 6º andar",
+     "bairro": "Itaim Bibi",
+     "cidade": "São Paulo",
+     "uf": "SP",
+     "cep": "04543-900"
+    },
+    {
+     "tipo_pessoa": "PJ",
+     "nome": "FACTA FINANCEIRA S.A. — CRÉDITO, FINANCIAMENTO E INVESTIMENTO",
+     "razao_social": "FACTA FINANCEIRA S.A. — CRÉDITO, FINANCIAMENTO E INVESTIMENTO",
+     "cpf_cnpj": "15581638000130",
+     "cnpj": "15581638000130",
+     "logradouro": "Rua dos Andradas",
+     "numero": "1409",
+     "complemento": "7º andar",
+     "bairro": "Centro",
+     "cidade": "Porto Alegre",
+     "uf": "RS",
+     "cep": "90020-011"
+    },
+    {
+     "tipo_pessoa": "PJ",
+     "nome": "321 SOCIEDADE DE CRÉDITO DIRETO S.A.",
+     "razao_social": "321 SOCIEDADE DE CRÉDITO DIRETO S.A.",
+     "cpf_cnpj": "54647259000158",
+     "cnpj": "54647259000158",
+     "logradouro": "Avenida Carlos Gomes",
+     "numero": "1492",
+     "complemento": "conjunto 611",
+     "bairro": "Três Figueiras",
+     "cidade": "Porto Alegre",
+     "uf": "RS",
+     "cep": "90480-002"
+    },
+    {
+     "tipo_pessoa": "PJ",
+     "nome": "ALL IN CRED SOCIEDADE DE CRÉDITO DIRETO S.A.",
+     "razao_social": "ALL IN CRED SOCIEDADE DE CRÉDITO DIRETO S.A.",
+     "cpf_cnpj": "51414521000126",
+     "cnpj": "51414521000126",
+     "logradouro": "Rua José Maria Lisboa",
+     "numero": "757",
+     "complemento": "conjunto 107",
+     "bairro": "Jardim Paulista",
+     "cidade": "São Paulo",
+     "uf": "SP",
+     "cep": "01423-001"
+    }
+   ]
+  },
+  {
+   "id": "ddda7230-3590-49b8-992b-abf21042cd8a",
+   "valor_causa": 8000,
+   "passivo": [
+    {
+     "tipo_pessoa": "PJ",
+     "nome": "BANCO SANTANDER (BRASIL) S.A.",
+     "razao_social": "BANCO SANTANDER (BRASIL) S.A.",
+     "cpf_cnpj": "90400888000142",
+     "cnpj": "90400888000142",
+     "logradouro": "Avenida Presidente Juscelino Kubitschek",
+     "numero": "2041",
+     "complemento": "e 2235, Bloco A",
+     "bairro": "Vila Olímpia",
+     "cidade": "São Paulo",
+     "uf": "SP",
+     "cep": "04543-011"
+    },
+    {
+     "tipo_pessoa": "PJ",
+     "nome": "BANCO BRADESCO S.A.",
+     "razao_social": "BANCO BRADESCO S.A.",
+     "cpf_cnpj": "60746948000112",
+     "cnpj": "60746948000112",
+     "logradouro": "Núcleo Cidade de Deus",
+     "numero": "s/n",
+     "complemento": "",
+     "bairro": "Vila Yara",
+     "cidade": "Osasco",
+     "uf": "SP",
+     "cep": "06029-900"
+    },
+    {
+     "tipo_pessoa": "PJ",
+     "nome": "COOPERATIVA DE ECONOMIA E CRÉDITO MÚTUO — COOPERSERV (SICOOB COOPERSERV)",
+     "razao_social": "COOPERATIVA DE ECONOMIA E CRÉDITO MÚTUO — COOPERSERV (SICOOB COOPERSERV)",
+     "cpf_cnpj": "05667301000197",
+     "cnpj": "05667301000197",
+     "logradouro": "Avenida Brasil",
+     "numero": "830",
+     "complemento": "",
+     "bairro": "Centro",
+     "cidade": "Lençóis Paulista",
+     "uf": "SP",
+     "cep": "18682-060"
+    },
+    {
+     "tipo_pessoa": "PJ",
+     "nome": "NU PAGAMENTOS S.A. — INSTITUIÇÃO DE PAGAMENTO (NUBANK)",
+     "razao_social": "NU PAGAMENTOS S.A. — INSTITUIÇÃO DE PAGAMENTO (NUBANK)",
+     "cpf_cnpj": "18236120000158",
+     "cnpj": "18236120000158",
+     "logradouro": "Rua Capote Valente",
+     "numero": "39",
+     "complemento": "",
+     "bairro": "Pinheiros",
+     "cidade": "São Paulo",
+     "uf": "SP",
+     "cep": "05409-000"
+    }
+   ]
+  }
+ ],
+ "mensagens": [
+  {
+   "chave": "claudia_valor_contratos",
+   "conversa_id": "d093aa16-9d7f-4016-a4bc-4e190874fd66",
+   "texto": "Claudia, aqui é a Paula, do escritório do Dr. Alessandro. Sua petição está pronta para o protocolo. Para fechar o valor da causa, preciso do valor total de cada empréstimo consignado: Santander, Bradesco e Cooperserv. Consegue mandar um print do aplicativo ou do contrato mostrando o valor total e o número de parcelas de cada um? Se não tiver à mão, me diz o valor aproximado. Com isso o Dr. Alessandro protocola ainda hoje."
+  }
+ ]
+}

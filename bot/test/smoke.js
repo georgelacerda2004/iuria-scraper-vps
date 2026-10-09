@@ -254,6 +254,34 @@ let gerouDeNovo = false;
 const pp2 = await prepararProtocolo({ conversa: { triagem: triagemFake }, cliente: clienteFake, processoId: 'p1', entrevistaId: 'e-gerada', escritorioId: 'esc-1', historicoTexto: '', deps: { gerar: async () => { gerouDeNovo = true; }, inserir: async () => 'dist-10', pecaPronta: { viabilidade: { tem_direito: true }, preco: null } } });
 assert.equal(pp2.distribuicaoId, 'dist-10'); assert.equal(gerouDeNovo, false); assert.equal(pp2.viabilidade.tem_direito, true);
 
+// --- credores: catálogo, valor da causa, polo passivo preenchido, correções ---
+{
+  const { buscarCatalogo, qualificarCredores, descreverCredor } = await import('../lib/credores.js');
+  assert.equal(buscarCatalogo('cartão do Nubank').cnpj, '18.236.120/0001-58');
+  assert.equal(buscarCatalogo('empréstimo Nu Financeira').cnpj, '30.680.829/0001-43');
+  assert.equal(buscarCatalogo('Sicoob Cooperserv').cnpj, '05.667.301/0001-97');
+  assert.equal(buscarCatalogo('Itaú Consignado').cnpj, '33.885.724/0001-19');
+  assert.equal(buscarCatalogo('Loja Zé do Crédito'), null);
+  const q = await qualificarCredores(['Banco Pine', 'Loja Zé do Crédito', 'Financeira X'], { pesquisar: async n => n === 'Financeira X' ? { razao_social: 'FINANCEIRA X S.A.', cnpj: '11.111.111/0001-11', endereco: 'Rua A, nº 1, Centro, Cidade/SP, CEP 00000-000', confianca: 'alta', fonte: 'https://x' } : { confianca: 'baixa' } });
+  assert.equal(q[0].fonte, 'catalogo'); assert.equal(q[1].pendente, true); assert.equal(q[2].cnpj, '11.111.111/0001-11'); assert.match(q[2].fonte, /internet/);
+  assert.match(descreverCredor(q[1]), /A CONFIRMAR/); assert.match(descreverCredor(q[0]), /62\.144\.175/);
+  const { lerValor, montarDistribuicao, REGRAS_ESCRITORIO } = await import('../lib/peticao.js');
+  assert.equal(lerValor('R$ 38.946,00'), 38946); assert.equal(lerValor('8000'), 8000); assert.equal(lerValor(''), null); assert.equal(lerValor('n/a'), null);
+  assert.ok(REGRAS_ESCRITORIO.some(r => /VALOR DA CAUSA/.test(r)) && REGRAS_ESCRITORIO.some(r => /campo em branco/.test(r)));
+  const dist = montarDistribuicao({ cliente: clienteFake, processoId: 'p1', entrevistaId: 'e1', triagem: { ...triagemFake, dividas: [{ credor: 'Banco Pine' }] }, escritorioId: 'esc', criadoPor: 'u', credores: q, valorCausa: 'R$ 38.946,00' });
+  assert.equal(dist.valor_causa, 38946); assert.equal(dist.partes.passivo.length, 3);
+  assert.equal(dist.partes.passivo[0].cnpj, '62144175000120'); assert.equal(dist.partes.passivo[0].cidade, 'São Paulo'); assert.equal(dist.partes.passivo[0].uf, 'SP'); assert.equal(dist.partes.passivo[0].cep, '04543-900');
+  assert.equal(dist.partes.passivo[1].pendente, true); assert.match(dist.observacao, /ATENÇÃO: Loja Zé do Crédito/);
+  // prepararProtocolo passa os credores qualificados para a IA e o valor da causa da IA para a distribuição
+  let recebido = null, linhaIns = null;
+  const pp3 = await prepararProtocolo({ conversa: { triagem: { ...triagemFake, dividas: [{ credor: 'Bradesco' }] } }, cliente: clienteFake, processoId: 'p1', entrevistaId: 'e1', escritorioId: 'esc-1', historicoTexto: '', deps: { qualificar: qualificarCredores, gerar: async (x) => { recebido = x; return { html: '<html>', viabilidade: { tem_direito: true, valor_estimado_causa: 'R$ 12.345,67' }, preco: 1 }; }, inserir: async (l) => { linhaIns = l; return 'dist-11'; } } });
+  assert.equal(pp3.distribuicaoId, 'dist-11'); assert.equal(recebido.credores[0].cnpj, '60.746.948/0001-12'); assert.equal(linhaIns.valor_causa, 12345.67); assert.equal(linhaIns.partes.passivo[0].cidade, 'Osasco');
+  const { aplicarTrocas, lerCorrecoes } = await import('../lib/correcoes.js');
+  assert.deepEqual(aplicarTrocas('a ____ b', [['____', 'X'], ['zzz', 'Y']]), { html: 'a X b', trocas: 1 });
+  const corr = lerCorrecoes(); assert.ok(corr.length >= 1 && corr[0].peticoes.length === 2 && corr[0].distribuicoes.length === 2 && corr[0].mensagens.length === 1);
+  console.log('smoke ok (credores/valor da causa/correções)');
+}
+
 // --- campanha: regras de decisão e relatório ---
 const { decidir, relatorio: relCamp } = await import('../lib/campanha.js');
 const R = { orcamentoDiario: 100, gastoMinimoParaJulgar: 60, tetoCustoConversa: 25, tetoCustoLeadQualificado: 120, janelaDias: 7 };
