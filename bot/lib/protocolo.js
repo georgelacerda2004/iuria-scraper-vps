@@ -6,20 +6,25 @@ import { avisarOperador } from './iuria.js';
 
 const BUCKET = 'documentos';
 export const STATUS = ['rascunho', 'pronta', 'aprovada', 'em_protocolo', 'protocolada', 'erro'];
+// Sobe quando o layout do PDF muda: pacotes 'pronta' de versão antiga são refeitos (aprovados/protocolados não).
+export const PACOTE_VERSAO = 2;
 
 // Distribuições em rascunho cuja petição já existe: gera o pacote e marca 'pronta'. Roda periodicamente.
 export async function prepararPacotes({ s = db(), limite = 5 } = {}) {
   if (!s) return [];
-  const { data: dists } = await s.from('distribuicoes').select('*').eq('status', 'rascunho').not('entrevista_id', 'is', null).order('created_at', { ascending: true }).limit(limite);
+  const { data: lista } = await s.from('distribuicoes').select('*').in('status', ['rascunho', 'pronta']).not('entrevista_id', 'is', null).order('created_at', { ascending: true }).limit(50);
+  const dists = (lista || []).filter(d => d.status === 'rascunho' || Number(d.progresso?.pacote_versao || 1) < PACOTE_VERSAO).slice(0, limite);
   const feitas = [];
   for (const d of dists || []) {
     try {
       const { data: e } = await s.from('inicial_entrevistas').select('peticao_html,status').eq('id', d.entrevista_id).maybeSingle();
       if (!e?.peticao_html) continue;
       const { pacote, avisos } = await montarPacote({ distribuicao: d, clienteId: d.cliente_id, peticaoHtml: e.peticao_html });
-      const progresso = { ...(d.progresso || {}), etapa: 'pacote_pronto', pacote, avisos, pacote_em: new Date().toISOString() };
+      const refeito = d.status === 'pronta';
+      const progresso = { ...(d.progresso || {}), etapa: 'pacote_pronto', pacote, avisos, pacote_em: new Date().toISOString(), pacote_versao: PACOTE_VERSAO };
       const { error } = await s.from('distribuicoes').update({ status: 'pronta', progresso }).eq('id', d.id);
       if (error) throw new Error(error.message);
+      if (refeito) { feitas.push(d.id); continue; } // só atualizou os PDFs: não avisa de novo
       const { data: cli } = await s.from('clientes').select('nome').eq('id', d.cliente_id).maybeSingle();
       await avisarOperador(`PRONTO PARA PROTOCOLAR — ${cli?.nome || d.cliente_id}\n${pacote.length} PDF(s) montados (petição + anexos). Valor da causa R$ ${Number(d.valor_causa || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}.${avisos.length ? '\nAvisos: ' + avisos.join('; ') : ''}\nPara protocolar: abrir o painel, conferir e tocar em "Aprovar e protocolar". O robô do escritório faz o resto.`);
       feitas.push(d.id);
