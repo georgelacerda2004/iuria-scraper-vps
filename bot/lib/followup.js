@@ -65,7 +65,13 @@ export async function rodar({ agora = Date.now(), deps = {} } = {}) {
   let enviados = 0;
   for (const c of data || []) {
     const passo = AGENDA[c.followup_n];
-    if (!passo || agora - new Date(c.ultima_entrada_em).getTime() < passo.depois) continue;
+    if (!passo) continue;
+    // Espera contada desde a última mensagem da pessoa E, a partir do segundo, um intervalo mínimo desde o follow-up anterior
+    // (senão, quem ficou a noite toda em silêncio recebe dois seguidos às 8h).
+    const desdeEntrada = agora - new Date(c.ultima_entrada_em).getTime();
+    const desdeUltimo = c.followup_em ? agora - new Date(c.followup_em).getTime() : Infinity;
+    const intervalo = c.followup_n ? passo.depois - AGENDA[c.followup_n - 1].depois : 0;
+    if (desdeEntrada < passo.depois || desdeUltimo < intervalo) continue;
     try {
       const texto = passo.via === 'texto' ? await montarTexto(c, deps) : null;
       const r = await (deps.enviar || enviar)({ to: c.wa_id, texto, ultimaEntradaEm: c.ultima_entrada_em, template: c.etapa === 'consentimento' || c.etapa === 'triagem' || c.etapa === 'proposta' ? 'se_retomada' : 'se_pendencia', params: c.etapa === 'consentimento' || c.etapa === 'triagem' || c.etapa === 'proposta' ? [primeiro(c.nome_perfil) || 'tudo bem'] : [primeiro(c.nome_perfil) || 'tudo bem', pendenciaCurta(c)], templateDisponivel: deps.templateDisponivel || disponivel });

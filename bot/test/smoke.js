@@ -313,6 +313,7 @@ console.log('smoke ok (peticao + campanha)');
   const fu = await import('../lib/followup.js');
   const { dentroDaJanela, enviar } = await import('../lib/whatsapp.js');
   assert.equal(fu.AGENDA.length, 3);
+  assert.ok(fu.AGENDA[1].depois - fu.AGENDA[0].depois >= 6 * 3600_000, 'segundo follow-up precisa de intervalo mínimo após o primeiro');
   assert.ok(dentroDaJanela(new Date(Date.now() - 3600_000).toISOString())); assert.ok(!dentroDaJanela(new Date(Date.now() - 25 * 3600_000).toISOString())); assert.ok(!dentroDaJanela(null));
   assert.match(fu.textoFixo({ etapa: 'consentimento', nome_perfil: 'Ana Lima' }), /^Oi, Ana!.*Responda \*SIM\*/s);
   assert.match(fu.textoFixo({ etapa: 'docs', nome_perfil: 'Ana', triagem: { documentos: { pessoal: {} } } }), /comprovante de endereço/);
