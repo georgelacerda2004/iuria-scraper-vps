@@ -338,7 +338,9 @@ console.log('smoke ok (peticao + campanha)');
 {
   const { resumirConversa, funil, montarRouter } = await import('../lib/painel.js');
   const c = resumirConversa({ id: 'x', wa_id: '5511987654321', nome_perfil: 'Ana', etapa: 'docs', consentimento_em: 'd', triagem: { resultado: 'favoravel', pagamento: 'apos_liminar', calculo: { renda_liquida: 1000, percentual_renda_comprometido: 60, sobra_mensal: -200, indicativo: 'favoravel' }, documentos: { pessoal: {} } } });
-  assert.equal(c.telefone, '(11) 98765-4321'); assert.equal(c.pct, 60); assert.equal(c.docs, 1); assert.equal(c.rotulo, 'Mandando documentos');
+  assert.equal(c.telefone, '(11) 98765-4321'); assert.equal(c.temperatura, 'quente');
+  const { temperatura } = await import('../lib/painel.js');
+  assert.equal(temperatura({ etapa: 'cliente' }).nivel, 'pronto'); assert.equal(temperatura({ etapa: 'consentimento' }).nivel, 'frio'); assert.equal(temperatura({ etapa: 'triagem', consentimento_em: 'x', triagem: { calculo: {}, resultado: 'favoravel' } }).nivel, 'morno'); assert.equal(c.pct, 60); assert.equal(c.docs, 1); assert.equal(c.rotulo, 'Mandando documentos');
   const f = funil([c, resumirConversa({ etapa: 'consentimento', wa_id: '1' })]);
   assert.equal(f.total, 2); assert.equal(f.favoraveis, 1); assert.equal(f.sem_resposta, 1); assert.equal(f.por_pagamento.apos_liminar, 1);
   const express = (await import('express')).default;

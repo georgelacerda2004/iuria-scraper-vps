@@ -26,9 +26,30 @@ async function meta() {
   return cacheMeta.dados;
 }
 
+// Temperatura: quão perto da contratação a Paula levou o lead. 'pronto' = tudo feito, falta só o advogado protocolar.
+export function temperatura(c) {
+  const t = c.triagem || {};
+  if (c.etapa === 'cliente') return { nivel: 'pronto', rotulo: 'Pronto para o advogado', score: 100 };
+  if (['desistiu', 'inviavel', 'encerrado'].includes(c.etapa)) return { nivel: 'frio', rotulo: 'Encerrado', score: 0 };
+  let score = 0;
+  if (c.consentimento_em) score += 10;
+  if (t.calculo) score += 15;
+  if (t.resultado === 'favoravel') score += 20; else if (t.resultado) score -= 20;
+  if (t.pagamento) score += 15;
+  score += Math.min(3, Object.keys(t.documentos || {}).length) * 5;
+  if ((t.assinaturas || []).length) score += 10;
+  if (c.assinado_em) score += 10;
+  if (c.pago_em) score += 10;
+  score = Math.max(0, Math.min(99, score));
+  const nivel = score >= 60 ? 'quente' : score >= 30 ? 'morno' : 'frio';
+  return { nivel, rotulo: { quente: 'Quente', morno: 'Morno', frio: 'Frio' }[nivel], score };
+}
+
 export function resumirConversa(c) {
   const t = c.triagem || {}; const calc = t.calculo || {};
+  const temp = temperatura(c);
   return {
+    temperatura: temp.nivel, temperatura_rotulo: temp.rotulo, score: temp.score,
     id: c.id, wa_id: c.wa_id, nome: c.nome_perfil || '', telefone: formatar(c.wa_id), etapa: c.etapa, rotulo: ROTULO[c.etapa] || c.etapa, ordem: ORDEM[c.etapa] ?? 99,
     ad_id: c.ad_id, origem: c.origem, criado_em: c.criado_em, ultima_msg_em: c.ultima_msg_em, ultima_entrada_em: c.ultima_entrada_em,
     consentiu: !!c.consentimento_em, resultado: t.resultado || null, indicativo: calc.indicativo || null,
@@ -47,7 +68,7 @@ export function funil(conversas) {
     total: n(() => true), anuncio: n(c => c.origem === 'ads_whatsapp'), consentiram: n(c => c.consentiu),
     triagem_fechada: n(c => c.resultado), favoraveis: n(c => c.resultado === 'favoravel'), proposta_aceita: n(c => c.pagamento),
     em_docs: n(c => c.etapa === 'docs'), aguardando: n(c => c.etapa === 'pagamento_assinatura'), clientes: n(c => c.etapa === 'cliente'),
-    pagos: n(c => c.pago_em), handoff: n(c => c.etapa === 'handoff'), desistiram: n(c => c.etapa === 'desistiu'), sem_resposta: n(c => ['novo', 'consentimento'].includes(c.etapa)),
+    pagos: n(c => c.pago_em), quentes: n(c => c.temperatura === 'quente'), prontos: n(c => c.temperatura === 'pronto'), handoff: n(c => c.etapa === 'handoff'), desistiram: n(c => c.etapa === 'desistiu'), sem_resposta: n(c => ['novo', 'consentimento'].includes(c.etapa)),
     por_pagamento: { agora: n(c => c.pagamento === 'agora'), apos_liminar: n(c => c.pagamento === 'apos_liminar'), ad_exitum: n(c => c.pagamento === 'ad_exitum') },
   };
 }
