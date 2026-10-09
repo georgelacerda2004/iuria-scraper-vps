@@ -105,6 +105,24 @@ export function lerValor(v) {
   return isFinite(n) && n > 0 ? n : null;
 }
 
+// "Avenida X, nº 1.830, Torre 4, 6º andar, Itaim Bibi, São Paulo/SP, CEP 04543-900" -> campos da parte.
+export function partirEndereco(endereco) {
+  const out = { logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '', cep: '' };
+  const seg = String(endereco || '').split(/,\s*/).map(x => x.trim()).filter(Boolean);
+  if (!seg.length) return out;
+  out.logradouro = seg.shift();
+  const resto = [];
+  for (const x of seg) {
+    let m;
+    if ((m = x.match(/^CEP\s*([\d.-]+)$/i))) out.cep = m[1];
+    else if ((m = x.match(/^(.+)\/([A-Z]{2})$/))) { out.cidade = m[1]; out.uf = m[2]; }
+    else if (!out.numero && (m = x.match(/^(?:n[ºo.]?\s*)?([\d.]+[A-Za-z]?|s\/n[ºo]?)$/i))) out.numero = m[1].replace(/^s\/n.*/i, 's/n');
+    else resto.push(x);
+  }
+  if (resto.length) { out.bairro = resto.pop(); out.complemento = resto.join(', '); }
+  return out;
+}
+
 export function montarDistribuicao({ cliente, processoId, entrevistaId, triagem, escritorioId, criadoPor, anexos = [], credores = [], valorCausa }) {
   const c = triagem?.calculo || {};
   const end = (cliente.endereco || '');
@@ -116,9 +134,8 @@ export function montarDistribuicao({ cliente, processoId, entrevistaId, triagem,
   }];
   const nomes = (triagem?.dividas || []).map(d => d.credor).filter(Boolean);
   const passivo = (credores.length ? credores : nomes.map(n => ({ nome: n, razao_social: n, cnpj: '', endereco: '' }))).map(q => {
-    const em = (q.endereco || '').match(/^(.*?),\s*n[ºo.]?\s*([\d.]+[A-Za-z]?|s\/n[ºo]?)[,\s]*(.*?)(?:,\s*([^,]+)\/([A-Z]{2}))?(?:,\s*CEP\s*([\d-]+))?$/);
-    return { tipo_pessoa: 'PJ', nome: q.razao_social || q.nome, razao_social: q.razao_social || q.nome, cpf_cnpj: (q.cnpj || '').replace(/\D/g, ''), cnpj: (q.cnpj || '').replace(/\D/g, ''),
-      logradouro: em ? em[1] : (q.endereco || ''), numero: em ? em[2] : '', complemento: em ? (em[3] || '').replace(/^[,\s-]+|[,\s-]+$/g, '') : '', bairro: '', cidade: em ? (em[4] || '') : '', uf: em ? (em[5] || '') : '', cep: em ? (em[6] || '') : '', pendente: !!q.pendente };
+    const e = partirEndereco(q.endereco);
+    return { tipo_pessoa: 'PJ', nome: q.razao_social || q.nome, razao_social: q.razao_social || q.nome, cpf_cnpj: (q.cnpj || '').replace(/\D/g, ''), cnpj: (q.cnpj || '').replace(/\D/g, ''), ...e, pendente: !!q.pendente };
   });
   return {
     criado_por: criadoPor, escritorio_id: escritorioId, cliente_id: cliente.id, processo_id: processoId, entrevista_id: entrevistaId,
