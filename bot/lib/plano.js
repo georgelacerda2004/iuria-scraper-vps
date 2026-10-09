@@ -9,6 +9,17 @@ export const TETO_RENDA_SUGERIDO = 0.30;   // referência usual nos pedidos de l
 
 const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 
+// Honorários de êxito projetados: pct da economia mensal x meses, em até N parcelas, cada uma limitada a teto% da economia.
+export function honorariosProjetados(reducaoMensal) {
+  const pct = Number(process.env.HONORARIOS_EXITO_PCT || 20), meses = Number(process.env.HONORARIOS_EXITO_MESES || 12), teto = Number(process.env.HONORARIOS_EXITO_TETO_PCT || 25);
+  const economia = Math.max(0, Number(reducaoMensal || 0));
+  const total = r2(economia * meses * pct / 100);
+  const parcelaTeto = r2(economia * teto / 100);
+  const parcela = r2(Math.min(total / meses, parcelaTeto));
+  const nParcelas = parcela > 0 ? Math.min(meses, Math.ceil(total / parcela)) : 0;
+  return { pct, meses, teto_pct: teto, economia_mensal: economia, total, parcela, parcelas: nParcelas, entrada: Number(process.env.HONORARIOS_ENTRADA || 500) };
+}
+
 // Projeção do plano de pagamento a partir do cálculo da triagem.
 export function projetarPlano(triagem = {}) {
   const c = triagem.calculo || {};
@@ -41,6 +52,7 @@ export function projetarPlano(triagem = {}) {
       conciliacao: `audiência global com ${c.credores_considerados ?? 'os'} credor(es) e plano de ${meses} meses, parcela de R$ ${parcelaProposta.toFixed(2)}`,
       compulsorio: cabeNoPrazo ? 'plano judicial compulsório (art. 104-B) com quitação do principal em até 5 anos, se não houver acordo' : 'saldo não cabe em 60 meses com a parcela proposta: o plano compulsório exigirá redução do principal, juros ou prazo maior por acordo',
     },
+    honorarios: honorariosProjetados(reducaoMensal),
     aviso: 'Projeção com base na Lei 14.181/2021 e nos dados informados pela pessoa. Depende de decisão judicial e da conciliação; não é garantia.',
   };
 }
@@ -89,6 +101,7 @@ export function briefingFechamento({ conversa, plano, checklist }) {
   if (plano) {
     l.push(`Plano proposto: parcela ${brl(plano.parcela_proposta)}/mês (${plano.pct_proposto}% da renda) por ${plano.prazo_meses} meses · redução de ${brl(plano.reducao_mensal)}/mês (${plano.reducao_pct}%) · sobra depois ${brl(plano.sobra_depois)}`);
     l.push(`Valor da causa: ${brl(plano.valor_da_causa)} · liminar: ${plano.pedidos.liminar}`);
+    if (plano.honorarios?.total) l.push(`Honorários projetados: entrada ${brl(plano.honorarios.entrada)} (ou após a liminar / ad exitum) + êxito ${brl(plano.honorarios.total)} (${plano.honorarios.pct}% de ${brl(plano.honorarios.economia_mensal)} x ${plano.honorarios.meses}), em ${plano.honorarios.parcelas} x ${brl(plano.honorarios.parcela)}`);
     if (!plano.cabe_no_prazo) l.push(`Atenção: ${plano.pedidos.compulsorio}`);
   }
   l.push(checklist.faltam.length ? `Falta: ${checklist.faltam.join('; ')}.` : 'Nada falta da parte do cliente. Falta só a revisão e a assinatura do advogado.');

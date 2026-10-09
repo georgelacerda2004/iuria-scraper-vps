@@ -416,6 +416,10 @@ console.log('smoke ok (peticao + campanha)');
   assert.equal(ck.pronto_para_advogado, true);
   const b = briefingFechamento({ conversa: { triagem: t, nome_perfil: 'Jane' }, plano: p, checklist: ck });
   assert.match(b, /^FECHADO ✅/); assert.match(b, /R\$ 160,00\/mês/); assert.match(b, /Valor da causa: R\$ 6\.000,00/);
+  // honorários: 20% de 440 x 12 = 1.056; parcela 1.056/12 = 88, abaixo do teto de 25% de 440 (110) → 12 x 88
+  assert.equal(p.honorarios.total, 1056); assert.equal(p.honorarios.parcela, 88); assert.equal(p.honorarios.parcelas, 12);
+  const h300 = (await import('../lib/plano.js')).honorariosProjetados(300); assert.equal(h300.total, 720); assert.equal(h300.parcela, 60);
+  assert.match(b, /Honorários projetados: entrada R\$ 500,00/);
   // fluxo cliente: arquivo vira comprovante de dívida guardado
   const g = await proximoPasso({ etapa: 'cliente', cliente_id: 'cli', triagem: {} }, { mediaId: 'm9', tipo: 'image' }, { captacao: { baixar: async () => ({ buffer: Buffer.from('x'), mime: 'image/jpeg' }), guardar: async () => 'p/x.jpg', classificar: async () => ({ tipo: 'Boleto', dados: {} }), registrarDoc: async (d) => { assert.equal(d.tipo, 'Boleto'); } } });
   assert.match(g.respostas[0], /guardei/); assert.equal(g.patch.triagem.docs_dividas, 1);

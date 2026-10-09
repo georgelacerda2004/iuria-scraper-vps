@@ -42,9 +42,13 @@ services:
       - key: HONORARIOS_ENTRADA
         value: "500"
       - key: HONORARIOS_EXITO_PCT
-        value: "30"
+        value: "20"
       - key: HONORARIOS_ADEXITUM_PCT
-        value: "30"
+        value: "20"
+      - key: HONORARIOS_EXITO_MESES
+        value: "12"
+      - key: HONORARIOS_EXITO_TETO_PCT
+        value: "25"
       - key: ASAAS_API_KEY
         sync: false
       - key: ASAAS_BASE_URL

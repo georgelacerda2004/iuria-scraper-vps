@@ -11,9 +11,14 @@ const ADV = () => ({
   foro: process.env.FORO_CONTRATO || 'São Paulo/SP',
 });
 const ENTRADA = () => Number(process.env.HONORARIOS_ENTRADA || 500);
-const EXITO_PCT = () => Number(process.env.HONORARIOS_EXITO_PCT || 30);
+const EXITO_PCT = () => Number(process.env.HONORARIOS_EXITO_PCT || 20);
+const EXITO_MESES = () => Number(process.env.HONORARIOS_EXITO_MESES || 12);
+const EXITO_TETO_PCT = () => Number(process.env.HONORARIOS_EXITO_TETO_PCT || 25);
+// Base do êxito: a economia mensal efetivamente obtida (diferença entre o que a pessoa pagava por mês e o que passou
+// a pagar por decisão ou acordo), multiplicada por 12 meses. Parcelado e com teto, para não tirar o alívio conquistado.
+const CLAUSULA_EXITO = (pct) => `honorários de êxito de ${pct}% (${porExtenso(pct)} por cento) sobre a economia mensal efetivamente obtida pelo(a) CONTRATANTE, assim entendida a diferença entre a soma das parcelas e descontos mensais das dívidas de consumo antes do processo e a soma fixada em decisão judicial (inclusive liminar) ou em acordo, multiplicada por ${EXITO_MESES()} (${porExtenso(EXITO_MESES())}) meses. Esses honorários são devidos somente após a decisão ou acordo que gerar a economia, somente em caso de resultado favorável, e podem ser pagos em até ${EXITO_MESES()} parcelas mensais, sendo que cada parcela nunca ultrapassará ${EXITO_TETO_PCT()}% (${porExtenso(EXITO_TETO_PCT())} por cento) da economia mensal obtida, de modo que o(a) CONTRATANTE conserve, no mínimo, três quartos do alívio conquistado. Não havendo economia, nada será devido a este título`;
 const porExtenso = (n) => ({ 10: 'dez', 15: 'quinze', 20: 'vinte', 25: 'vinte e cinco', 30: 'trinta', 35: 'trinta e cinco', 40: 'quarenta' }[n] || String(n));
-const RESTANTE = () => process.env.HONORARIOS_RESTANTE_TEXTO || `honorários de êxito de ${EXITO_PCT()}% (${porExtenso(EXITO_PCT())} por cento) sobre o proveito econômico efetivamente obtido pelo(a) CONTRATANTE (redução do valor das parcelas, dos juros ou do saldo das dívidas, apurada pela diferença entre o que era exigido e o que ficou definido em acordo ou decisão), devidos somente ao final do processo e somente em caso de resultado favorável`;
+const RESTANTE = () => process.env.HONORARIOS_RESTANTE_TEXTO || CLAUSULA_EXITO(EXITO_PCT());
 
 const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 function dataExtenso(d = new Date()) { return `${d.getDate()} de ${MESES[d.getMonth()]} de ${d.getFullYear()}`; }
@@ -75,7 +80,7 @@ export async function gerarContrato(c, triagem = {}) {
   par(doc, 'O(A) CONTRATADO(A) prestará ao(à) CONTRATANTE os serviços de análise jurídica da situação de superendividamento, elaboração do plano de pagamento e propositura e acompanhamento do processo de repactuação de dívidas previsto nos arts. 104-A a 104-C do Código de Defesa do Consumidor (Lei 14.181/2021), incluída a fase de conciliação, e, se necessário, o pedido de plano judicial compulsório, até decisão final em primeira instância.');
   sub(doc, 'Cláusula 2ª — Honorários');
   par(doc, adExitum
-    ? `Pelos serviços, considerando a situação financeira declarada, as partes ajustam que não haverá entrada nem qualquer pagamento antecipado. O(A) CONTRATANTE pagará ao(à) CONTRATADO(A) exclusivamente honorários de êxito (ad exitum) de ${ADEX}% (${porExtenso(ADEX)} por cento) sobre o proveito econômico efetivamente obtido (redução do valor das parcelas, dos juros ou do saldo das dívidas, apurada pela diferença entre o que era exigido e o que ficou definido em acordo ou decisão), devidos somente ao final do processo e somente em caso de resultado favorável. Não havendo proveito econômico, nada será devido a título de honorários contratuais.`
+    ? `Pelos serviços, considerando a situação financeira declarada, as partes ajustam que não haverá entrada nem qualquer pagamento antecipado (ad exitum). O(A) CONTRATANTE pagará ao(à) CONTRATADO(A) exclusivamente ${CLAUSULA_EXITO(ADEX)}.`
     : diferido
     ? `Pelos serviços, o(a) CONTRATANTE pagará ao(à) CONTRATADO(A), a título de entrada, o valor de ${brl(ENTRADA())}. Considerando a situação financeira declarada, as partes ajustam que a entrada será devida em até 10 (dez) dias após a intimação da decisão que deferir, ainda que em parte, a tutela de urgência (liminar) requerida na ação; não sendo deferida, as partes ajustarão por escrito nova data, sem prejuízo da continuidade dos serviços. Quanto ao restante: ${RESTANTE()}.`
     : `Pelos serviços, o(a) CONTRATANTE pagará ao(à) CONTRATADO(A), a título de entrada, o valor de ${brl(ENTRADA())}, por meio de cobrança eletrônica, no ato da contratação. Quanto ao restante: ${RESTANTE()}.`);
