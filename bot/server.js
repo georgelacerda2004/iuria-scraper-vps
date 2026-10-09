@@ -135,10 +135,12 @@ async function retentarPeticoes() {
     try {
       const cliente = await buscarCliente(c.cliente_id);
       if (!cliente) throw new Error('cliente não encontrado');
-      const historico = await carregarHistorico(c.id, 120);
-      const historicoTexto = historico.map(m => `${m.direcao === 'in' ? 'Cliente' : 'Paula'}: ${m.texto}`).join('\n');
+      // A primeira tentativa usa o histórico inteiro; as seguintes encurtam o contexto e usam o modelo rápido,
+      // porque a edge gerar-inicial tem limite de tempo (504 quando o texto é longo).
+      const historico = await carregarHistorico(c.id, tent === 0 ? 120 : 30);
+      const historicoTexto = historico.map(m => `${m.direcao === 'in' ? 'Cliente' : 'Paula'}: ${m.texto}`).join('\n').slice(0, tent === 0 ? 6000 : 2500);
       const entrevistaId = await criarEntrevista({ cliente, processoId: c.processo_id, escritorioId: process.env.ESCRITORIO_ID, triagem, historicoTexto });
-      const r = await prepararProtocolo({ conversa: c, cliente, processoId: c.processo_id, entrevistaId, escritorioId: process.env.ESCRITORIO_ID, historicoTexto });
+      const r = await prepararProtocolo({ conversa: c, cliente, processoId: c.processo_id, entrevistaId, escritorioId: process.env.ESCRITORIO_ID, historicoTexto, modelo: tent === 0 ? undefined : (process.env.PETICAO_MODELO_RAPIDO || 'sonnet') });
       await atualizarConversa(c.id, { triagem: { ...triagem, peticao_tentativas: tent + 1 } });
       await avisarOperador(`PETIÇÃO PRONTA PARA REVISÃO — ${cliente.nome}\nDistribuição em rascunho (${r.distribuicaoId || 'sem id'}) no IURIA. Falta: exportar o PDF da petição, completar CNPJ dos credores e assinar com o A3.${r.viabilidade?.fundamento_resumo ? '\nViabilidade (IA): ' + r.viabilidade.fundamento_resumo : ''}`);
       console.log('[peticao] gerada na nova tentativa:', c.wa_id);

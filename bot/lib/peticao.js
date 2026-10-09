@@ -33,7 +33,7 @@ export function montarEntrevista({ cliente, triagem, historicoTexto = '' }) {
   return linhas.filter(Boolean).join('\n');
 }
 
-export async function gerarPeticao({ cliente, triagem, entrevistaId, anexos = [], historicoTexto = '' }) {
+export async function gerarPeticao({ cliente, triagem, entrevistaId, anexos = [], historicoTexto = '', modelo }) {
   const advogado = process.env.ADVOGADO_NOME && process.env.ADVOGADO_OAB ? `${process.env.ADVOGADO_NOME} — ${process.env.ADVOGADO_OAB}` : undefined;
   const cidade = cliente.cidade ? `${cliente.cidade}${cliente.uf ? '/' + cliente.uf : ''}` : (process.env.FORO_CONTRATO || 'São Paulo/SP');
   const payload = {
@@ -43,7 +43,7 @@ export async function gerarPeticao({ cliente, triagem, entrevistaId, anexos = []
     advogado_signatario: advogado,
     cidade, data_protocolo: `${cidade}, ${dataExtenso()}`,
     anexos: anexos.slice(0, 5),
-    modelo_ia: process.env.PETICAO_MODELO || 'opus',
+    modelo_ia: modelo || process.env.PETICAO_MODELO || 'opus',
   };
   const r = await fetch(`${SB_URL()}/functions/v1/gerar-inicial`, {
     method: 'POST', headers: { Authorization: `Bearer ${SB_SVC()}`, apikey: SB_SVC(), 'Content-Type': 'application/json' },
@@ -78,7 +78,7 @@ export function montarDistribuicao({ cliente, processoId, entrevistaId, triagem,
 }
 
 // Orquestra: anexos → gerar-inicial → distribuicoes (rascunho) → aviso. Devolve { distribuicaoId, preco }.
-export async function prepararProtocolo({ conversa, cliente, processoId, entrevistaId, escritorioId, historicoTexto, deps = {} }) {
+export async function prepararProtocolo({ conversa, cliente, processoId, entrevistaId, escritorioId, historicoTexto, modelo, deps = {} }) {
   const s = db();
   const triagem = conversa.triagem || {};
   const anexos = [];
@@ -95,7 +95,7 @@ export async function prepararProtocolo({ conversa, cliente, processoId, entrevi
     }
   }
   const gerar = deps.gerar || gerarPeticao;
-  const pet = await gerar({ cliente, triagem, entrevistaId, anexos: anexos.filter(a => a.tipo !== 'Procuração'), historicoTexto });
+  const pet = await gerar({ cliente, triagem, entrevistaId, anexos: anexos.filter(a => a.tipo !== 'Procuração'), historicoTexto, modelo });
   const linha = montarDistribuicao({ cliente, processoId, entrevistaId, triagem, escritorioId, criadoPor: cliente.criado_por, anexos });
   let distribuicaoId = null;
   if (deps.inserir) distribuicaoId = await deps.inserir(linha);
