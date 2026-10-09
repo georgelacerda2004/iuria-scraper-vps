@@ -114,11 +114,10 @@ async function verificarPendencias() {
   for (const c of data || []) {
     try { await checarConversa(c); } catch (e) { console.error('[pendencias]', c.wa_id, e.message); }
   }
-  await recuperarCadastros();
-  await enviarMensagensOperador();
-  await retomarConversas();
-  await reemitirPendentes();
-  await confirmarPagamentosOfertas().catch(e => console.error('[mercado]', e.message));
+  // Cada rotina isolada: uma falha não impede as outras (e fica no log).
+  for (const [nome, fn] of [['recuperar', recuperarCadastros], ['operador', enviarMensagensOperador], ['retomar', retomarConversas], ['reemitir', reemitirPendentes], ['mercado', confirmarPagamentosOfertas]]) {
+    try { await fn(); } catch (e) { console.error(`[pendencias:${nome}]`, e.message); }
+  }
 }
 if (process.env.NODE_ENV !== 'test') setInterval(() => fecharOfertas().then(n => n && console.log(`[mercado] ${n} oferta(s) fechada(s)`)).catch(e => console.error('[mercado]', e.message)), 60_000);
 
@@ -263,7 +262,7 @@ async function recuperarCadastros() {
     }
   }
 }
-if (process.env.NODE_ENV !== 'test') setInterval(() => verificarPendencias().catch(() => {}), 3 * 60_000);
+if (process.env.NODE_ENV !== 'test') setInterval(() => verificarPendencias().catch(e => console.error('[pendencias]', e.message)), 3 * 60_000);
 
 // SDR (follow-ups a cada 10 min), pós (protocolo e andamentos a cada 15 min) e templates do WhatsApp (boot + 1x/dia).
 if (process.env.NODE_ENV !== 'test') {
