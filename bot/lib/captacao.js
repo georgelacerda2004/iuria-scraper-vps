@@ -10,8 +10,13 @@ import { prepararProtocolo } from './peticao.js';
 const SLOTS = [
   { slot: 'pessoal', pede: 'Agora preciso de uma foto do seu *RG ou CNH* (frente e verso na mesma foto, ou em duas mensagens). Pode mandar como foto ou PDF.', aceita: /RG|CNH|CPF/i },
   { slot: 'endereco', pede: 'Recebi! Agora um *comprovante de endereço* recente (conta de luz, água ou telefone), no seu nome ou de quem mora com você.', aceita: /resid|endere/i },
-  { slot: 'renda', pede: 'Perfeito. Por último, um *comprovante de renda*: holerite, extrato do INSS ou extrato bancário dos últimos 3 meses.', aceita: /renda|holerite|extrato|imposto|ctps/i },
+  { slot: 'renda', pede: 'Perfeito. Agora um *comprovante de renda*: holerite, extrato do INSS ou extrato bancário dos últimos 3 meses.', aceita: /renda|holerite|extrato|imposto|ctps/i },
+  // Vários arquivos: a pessoa manda quantos tiver e encerra com "pronto" (ou "pular" se não tiver agora).
+  { slot: 'dividas', multi: true, pede: 'Por último, os *comprovantes das dívidas*: fatura do cartão, extrato do empréstimo, contrato, tela do app do banco ou carta de cobrança. Pode mandar vários, um por mensagem. Quando terminar, escreva *pronto*. Se não tiver nada agora, escreva *pular*.', aceita: /./ },
 ];
+// Tipos aceitos pela tabela documentos do IURIA; o resto vira "Outro".
+const TIPOS_IURIA = new Set(['RG / CPF', 'CNH', 'CPF', 'RG', 'Comprovante de residência', 'Comprovante de renda', 'CTPS', 'Holerite', 'Imposto de Renda', 'Extrato bancário', 'Procuração', 'Contrato de honorários', 'Contrato', 'Boleto', 'Recibo', 'Nota fiscal', 'Outro']);
+const tipoIuria = (t) => TIPOS_IURIA.has(t) ? t : 'Outro';
 const NOME_ROBO = () => process.env.NOME_ROBO || 'Paula';
 // Forma da entrada combinada na proposta: 'agora' (cobrança Asaas), 'apos_liminar' ou 'ad_exitum' (sem entrada).
 export const modoEntrada = (triagem) => ['apos_liminar', 'ad_exitum'].includes((triagem || {}).pagamento) ? triagem.pagamento : 'agora';
@@ -27,12 +32,14 @@ export function cpfValido(v) {
 }
 
 export const MSG = {
-  inicioDocs: (nome) => `${nome ? nome.split(' ')[0] + ', p' : 'P'}elo que você me contou, sua situação tem sinais de se enquadrar na Lei do Superendividamento. Quem confirma isso é o advogado, e para ele analisar preciso de 3 documentos. Vamos um de cada vez.\n\n` + SLOTS[0].pede,
-  primeiroDoc: 'Para o advogado analisar, preciso de 3 documentos por aqui mesmo. Vamos um de cada vez.\n\n' + SLOTS[0].pede,
-  retomada: (nome) => `${nome ? nome.split(' ')[0] + ', a' : 'A'}qui é a ${NOME_ROBO()} de novo. Já deixei o seu caso com o advogado e ele vai analisar com calma. Para isso, preciso de 3 documentos por aqui mesmo. Vamos um de cada vez.\n\n` + SLOTS[0].pede,
+  inicioDocs: (nome) => `${nome ? nome.split(' ')[0] + ', p' : 'P'}elo que você me contou, sua situação tem sinais de se enquadrar na Lei do Superendividamento. Quem confirma isso é o advogado, e para ele analisar preciso de alguns documentos. Vamos um de cada vez.\n\n` + SLOTS[0].pede,
+  primeiroDoc: 'Para o advogado analisar, preciso de alguns documentos por aqui mesmo: RG ou CNH, comprovante de endereço, comprovante de renda e o que você tiver das dívidas. Vamos um de cada vez.\n\n' + SLOTS[0].pede,
+  retomada: (nome) => `${nome ? nome.split(' ')[0] + ', a' : 'A'}qui é a ${NOME_ROBO()} de novo. Já deixei o seu caso com o advogado e ele vai analisar com calma. Para isso, preciso de alguns documentos por aqui mesmo. Vamos um de cada vez.\n\n` + SLOTS[0].pede,
   naoEhDoc: (esperado) => `Esse arquivo não parece ser ${esperado}. Pode conferir e mandar de novo? Se preferir, escreva "pular" que a equipe pede depois.`,
   semArquivo: (pede) => `Preciso do arquivo (foto ou PDF) para seguir. ${pede}`,
-  processando: 'Recebi os 3 documentos, obrigado! Estou preparando o seu cadastro e os documentos para assinatura. Leva um minutinho.',
+  maisDividas: (n) => `Recebi (${n} arquivo${n > 1 ? 's' : ''} das dívidas). Pode mandar mais, ou escreva *pronto* para eu finalizar.`,
+  extraGuardado: 'Recebi, guardei na sua pasta no escritório. O advogado já tem acesso.',
+  processando: 'Recebi os documentos, obrigado! Estou preparando o seu cadastro e os documentos para assinatura. Leva um minutinho.',
   pedirCpf: 'Recebi os documentos, obrigado! Só não consegui ler o seu *CPF* na foto. Me manda o número do CPF (só os dígitos) para eu finalizar o cadastro.',
   linksEnvio: ({ valor, urlPagamento, docs, modo = 'agora' }) => urlPagamento
     ? `Pronto! Para seguir com o seu caso, são dois passos:\n\n` +
@@ -49,7 +56,21 @@ export const MSG = {
 
 function slotAtual(triagem) {
   const recebidos = triagem?.documentos || {};
-  return SLOTS.find(s => !recebidos[s.slot]) || null;
+  // Slot múltiplo (dívidas): os arquivos vão para `dividas_pendentes` e só viram `dividas` com "pronto" (ou [] com "pular").
+  return SLOTS.find(s => recebidos[s.slot] === undefined) || null;
+}
+
+// Arquivo recebido depois da contratação (etapa cliente): guarda na pasta e registra no IURIA.
+export async function guardarExtra(conversa, ev, deps = {}) {
+  const { baixar = downloadMedia, guardar = iuria.guardarArquivo, classificar = iuria.classificarDoc, registrarDoc = iuria.registrarDocumento } = deps;
+  const triagem = conversa.triagem || {};
+  const { buffer, mime } = await baixar(ev.mediaId);
+  const path = await guardar({ conversaId: conversa.id, slot: 'dividas', buffer, mime });
+  let cls = { tipo: 'Outro', dados: {} };
+  try { cls = await classificar(path, mime); } catch { /* sem OCR */ }
+  const lista = [...(Array.isArray(triagem.documentos?.dividas) ? triagem.documentos.dividas : []), { path, mime, tipo: cls.tipo, bytes: buffer.length, credor: cls.dados?.credor || null, pos_contratacao: true }];
+  if (conversa.cliente_id) await registrarDoc({ clienteId: conversa.cliente_id, nome: `dívida ${lista.length} (robô WhatsApp)`, tipo: tipoIuria(cls.tipo), storagePath: path, mime, bytes: buffer.length, dados: null, criadoPor: null }).catch(e => console.warn('[captacao] registrarDoc extra:', e.message));
+  return { respostas: [MSG.extraGuardado], patch: { triagem: { ...triagem, documentos: { ...(triagem.documentos || {}), dividas: lista }, docs_dividas: lista.length } } };
 }
 
 // Recebe um evento na etapa 'docs'. Devolve { respostas, patch, acao? }.
@@ -68,11 +89,16 @@ export async function receberDocumento(conversa, ev, deps = {}) {
 
   const texto = (ev.texto || '').trim();
   if (!ev.mediaId) {
-    if (/^pular$/i.test(texto)) {
-      const docs = { ...(triagem.documentos || {}), [atual.slot]: { pulado: true } };
+    const pendentes = Array.isArray(triagem.documentos?.[atual.slot + '_pendentes']) ? triagem.documentos[atual.slot + '_pendentes'] : [];
+    const encerraMulti = atual.multi && /^(pronto|pular)$/i.test(texto);
+    if (/^pular$/i.test(texto) || encerraMulti) {
+      const docs = { ...(triagem.documentos || {}) };
+      if (atual.multi) { docs[atual.slot] = pendentes; delete docs[atual.slot + '_pendentes']; }
+      else docs[atual.slot] = { pulado: true };
       const prox = slotAtual({ documentos: docs });
-      if (!prox && !cpfValido(triagem.dados?.cpf)) return { respostas: [MSG.pedirCpf], patch: { triagem: { ...triagem, documentos: docs } } };
-      return { respostas: [prox ? prox.pede : MSG.processando], patch: { triagem: { ...triagem, documentos: docs } }, acao: prox ? null : 'concluir' };
+      const t2 = { ...triagem, documentos: docs, docs_dividas: Array.isArray(docs.dividas) ? docs.dividas.length : 0 };
+      if (!prox && !cpfValido(triagem.dados?.cpf)) return { respostas: [MSG.pedirCpf], patch: { triagem: t2 } };
+      return { respostas: [prox ? prox.pede : MSG.processando], patch: { triagem: t2 }, acao: prox ? null : 'concluir' };
     }
     return { respostas: [MSG.semArquivo(atual.pede)], patch: {} };
   }
@@ -81,6 +107,13 @@ export async function receberDocumento(conversa, ev, deps = {}) {
   const path = await guardar({ conversaId: conversa.id, slot: atual.slot, buffer, mime });
   let cls = { tipo: 'Outro', dados: {} };
   try { cls = await classificar(path, mime); } catch (e) { console.warn('[captacao] OCR falhou:', e.message); }
+
+  // Comprovantes das dívidas: acumula numa lista e espera "pronto".
+  if (atual.multi) {
+    const chave = atual.slot + '_pendentes';
+    const lista = [...(Array.isArray(triagem.documentos?.[chave]) ? triagem.documentos[chave] : []), { path, mime, tipo: cls.tipo, bytes: buffer.length, credor: cls.dados?.credor || null }];
+    return { respostas: [MSG.maisDividas(lista.length)], patch: { triagem: { ...triagem, documentos: { ...(triagem.documentos || {}), [chave]: lista } } } };
+  }
 
   // Frente/verso do RG em duas fotos: a segunda foto do mesmo slot só complementa os dados.
   if (atual.slot === 'pessoal' && !atual.aceita.test(cls.tipo) && cls.tipo !== 'Outro') {
@@ -105,7 +138,8 @@ export async function concluirCadastro(conversa, deps = {}) {
 
   const cliente = await criarCliente({ dados: triagem.dados || {}, waId: conversa.wa_id, nomePerfil: conversa.nome_perfil, escritorioId });
   for (const [slot, d] of Object.entries(triagem.documentos || {})) {
-    if (d?.path) await registrarDoc({ clienteId: cliente.id, nome: `${slot} (robô WhatsApp)`, tipo: d.tipo || 'Outro', storagePath: d.path, mime: d.mime, bytes: d.bytes, dados: null, criadoPor: cliente.criado_por });
+    const lista = Array.isArray(d) ? d : [d];
+    for (const [i, x] of lista.entries()) if (x?.path) await registrarDoc({ clienteId: cliente.id, nome: `${slot}${lista.length > 1 ? ' ' + (i + 1) : ''} (robô WhatsApp)`, tipo: tipoIuria(x.tipo), storagePath: x.path, mime: x.mime, bytes: x.bytes, dados: null, criadoPor: cliente.criado_por });
   }
 
   // Entrada agora (cobrança Asaas) ou combinada para depois da liminar (sem cobrança; vai no contrato).

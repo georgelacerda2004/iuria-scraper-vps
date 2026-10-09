@@ -26,7 +26,7 @@ export function montarEntrevista({ cliente, triagem, historicoTexto = '' }) {
     `BOA-FÉ: ${triagem?.boa_fe === false ? 'NÃO confirmada na triagem — advogado deve apurar.' : 'consumidor declara ter contraído as dívidas de boa-fé, sem intenção de inadimplir.'} Pessoa física: ${triagem?.pessoa_fisica === false ? 'NÃO (atenção)' : 'sim'}.`,
     `EXCLUSÕES (art. 54-A §3º e Decreto 11.150/2022): ${(c.credores_excluidos || []).length ? 'há dívidas fora do regime (' + c.credores_excluidos.join(', ') + '), que NÃO entram no plano.' : 'nenhuma dívida excluída identificada.'}`,
     `PEDIDOS: (a) instauração do processo de repactuação com designação de audiência global de conciliação (art. 104-A); (b) apresentação do plano de pagamento em até 5 anos, preservado o mínimo existencial; (c) tutela de urgência para limitar os descontos/cobranças das dívidas de consumo ao percentual da renda que preserve o mínimo existencial e para suspender a exigibilidade até a audiência (art. 104-A §2º); (d) intimação dos credores para apresentar plano de pagamento sob as sanções do art. 104-A §2º; (e) subsidiariamente, instauração do plano judicial compulsório (art. 104-B); (f) justiça gratuita; (g) inversão do ônus da prova (art. 6º, VIII, CDC).`,
-    `DOCUMENTOS JUNTADOS: documento de identidade, comprovante de endereço, comprovante de renda, declaração de superendividamento assinada, procuração. Extratos e contratos das dívidas: ${triagem?.docs_dividas ? 'juntados' : 'a complementar pelo advogado antes do protocolo'}.`,
+    `DOCUMENTOS JUNTADOS: documento de identidade, comprovante de endereço, comprovante de renda, declaração de superendividamento assinada, declaração de hipossuficiência assinada, procuração. Extratos e contratos das dívidas: ${triagem?.docs_dividas ? `${triagem.docs_dividas} arquivo(s) juntado(s)` : 'a complementar pelo advogado antes do protocolo'}.`,
     triagem?.resumo ? `RESUMO DA TRIAGEM DO ROBÔ: ${triagem.resumo}` : '',
     historicoTexto ? `TRECHOS DA CONVERSA (contexto fático): ${historicoTexto.slice(0, 4000)}` : '',
   ];
@@ -82,7 +82,10 @@ export async function prepararProtocolo({ conversa, cliente, processoId, entrevi
   const s = db();
   const triagem = conversa.triagem || {};
   const anexos = [];
-  for (const [slot, d] of Object.entries(triagem.documentos || {})) if (d?.path) anexos.push({ nome: `${slot}`, tipo: slot === 'pessoal' ? 'RG / CPF' : slot === 'endereco' ? 'Comprovante de residência' : 'Comprovante de renda', storage_path: d.path, mime_type: d.mime });
+  for (const [slot, d] of Object.entries(triagem.documentos || {})) {
+    const lista = Array.isArray(d) ? d : [d];
+    for (const [i, x] of lista.entries()) if (x?.path) anexos.push({ nome: lista.length > 1 ? `${slot} ${i + 1}` : slot, tipo: slot === 'pessoal' ? 'RG / CPF' : slot === 'endereco' ? 'Comprovante de residência' : slot === 'renda' ? 'Comprovante de renda' : 'Outro', storage_path: x.path, mime_type: x.mime });
+  }
   // PDFs assinados (declaração + procuração) já estão em `assinaturas.pdf_assinado_path`.
   if (s) {
     const ids = (triagem.assinaturas || []).map(a => a.autentiqueId).filter(Boolean);

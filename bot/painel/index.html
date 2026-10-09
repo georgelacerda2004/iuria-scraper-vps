@@ -68,7 +68,7 @@ async function carregar() {
   if (!senha()) return;
   try { DADOS = await api('/resumo'); } catch (e) { $('#loginerr').textContent = e.message === 'senha' ? 'Senha inválida.' : 'Erro: ' + e.message; return; }
   $('#login').style.display = 'none'; $('#app').style.display = 'block'; $('#loginerr').textContent = '';
-  render(); carregarMercado(); clearInterval(timer); timer = setInterval(carregar, 30000);
+  render(); if (DADOS.mercado_ativo) carregarMercado(); else { $('#mercado').innerHTML = '<span class="mut">segunda fase (desligado)</span>'; } clearInterval(timer); timer = setInterval(carregar, 30000);
 }
 function tile(b, s, cls = '') { return `<div class="tile"><b class="${cls}">${b}</b><span>${s}</span></div>`; }
 function render() {
@@ -103,14 +103,26 @@ async function abrir(id) {
   let x; try { x = await api('/conversas/' + id); } catch (e) { $('#detbox').innerHTML = '<p class="bad">' + esc(e.message) + '</p>'; return; }
   const calc = x.triagem?.calculo; const dividas = x.triagem?.dividas || [];
   $('#detbox').innerHTML = `
-    <div class="bar"><button onclick="fechar()">← voltar</button><a class="chip" href="https://wa.me/${x.wa_id}" target="_blank">abrir no WhatsApp</a>${x.etapa !== 'handoff' ? `<button onclick="acao('${x.id}','assumir')">Assumir (Paula para)</button>` : ''}${['handoff', 'desistiu', 'encerrado', 'inviavel'].includes(x.etapa) ? `<button class="p" onclick="acao('${x.id}','retomar')">Devolver à Paula</button>` : ''}${['triagem', 'proposta', 'docs', 'desistiu', 'handoff', 'inviavel', 'encerrado', 'consentimento'].includes(x.etapa) ? `<button onclick="acao('${x.id}','oferecer')">Oferecer a advogados</button>` : ''}</div>
+    <div class="bar"><button onclick="fechar()">← voltar</button><a class="chip" href="https://wa.me/${x.wa_id}" target="_blank">abrir no WhatsApp</a>${x.etapa !== 'handoff' ? `<button onclick="acao('${x.id}','assumir')">Assumir (Paula para)</button>` : ''}${['handoff', 'desistiu', 'encerrado', 'inviavel'].includes(x.etapa) ? `<button class="p" onclick="acao('${x.id}','retomar')">Devolver à Paula</button>` : ''}${DADOS?.mercado_ativo && ['triagem', 'proposta', 'docs', 'desistiu', 'handoff', 'inviavel', 'encerrado', 'consentimento'].includes(x.etapa) ? `<button onclick="acao('${x.id}','oferecer')">Oferecer a advogados</button>` : ''}</div>
     <h2 style="margin-top:6px">${esc(x.nome) || '—'} · ${esc(x.telefone)}</h2>
     <p>${temp(x)} <span class="chip">${esc(x.rotulo)}</span> ${x.ad_id ? '<span class="chip">anúncio ' + esc(x.ad_id) + '</span>' : ''} <span class="mut">chegou ${dt(x.criado_em)}</span></p>
     ${x.handoff_motivo ? `<p class="warn"><b>Motivo do handoff:</b> ${esc(x.handoff_motivo)}</p>` : ''}
+    ${x.checklist ? `<div class="tile" style="border-left:4px solid ${x.checklist.pronto_para_advogado ? 'var(--ok)' : 'var(--warn)'};margin:10px 0">
+      <b class="${x.checklist.pronto_para_advogado ? 'ok' : 'warn'}" style="font-size:16px">${x.checklist.pronto_para_advogado ? '✔ FECHADO · pronto para protocolar' : `Em fechamento · ${x.checklist.feitos}/${x.checklist.total}`}</b>
+      <pre style="white-space:pre-wrap;font:inherit;margin:8px 0">${esc(x.briefing)}</pre>
+      ${x.plano ? `<table style="margin:8px 0"><tr><th></th><th class="right">Hoje</th><th class="right">Plano proposto</th></tr>
+        <tr><td>Parcelas por mês</td><td class="right">${brl(x.plano.parcelas_atuais)} (${x.plano.pct_atual}%)</td><td class="right ok"><b>${brl(x.plano.parcela_proposta)}</b> (${x.plano.pct_proposto}%)</td></tr>
+        <tr><td>Sobra por mês</td><td class="right ${x.triagem?.calculo?.sobra_mensal < 600 ? 'bad' : ''}">${brl(x.triagem?.calculo?.sobra_mensal)}</td><td class="right">${brl(x.plano.sobra_depois)}</td></tr>
+        <tr><td>Prazo</td><td class="right">—</td><td class="right">${x.plano.prazo_meses} meses</td></tr>
+        <tr><td>Saldo das dívidas / valor da causa</td><td class="right">${brl(x.plano.saldo)}</td><td class="right">${brl(x.plano.total_no_plano)} no plano${x.plano.cabe_no_prazo ? '' : ' <span class="bad">(não cobre o saldo)</span>'}</td></tr></table>
+        <p class="mut" style="font-size:12px">Liminar: ${esc(x.plano.pedidos.liminar)}. ${esc(x.plano.aviso)}</p>` : ''}
+      <ul style="columns:2;column-gap:16px;padding-left:18px;font-size:13px">${x.checklist.itens.map(i => `<li class="${i.feito ? 'ok' : 'mut'}">${i.feito ? '✔' : '○'} ${esc(i.rotulo)}${i.detalhe ? ` <small>· ${esc(i.detalhe)}</small>` : ''}</li>`).join('')}</ul>
+      ${x.distribuicao ? `<p><b>Petição no IURIA:</b> distribuição em rascunho (${esc(String(x.distribuicao.id).slice(0, 8))}) · valor da causa ${brl(x.distribuicao.valor_causa)} · ${dt(x.distribuicao.created_at)}</p>` : ''}
+    </div>` : ''}
     ${x.resumo ? `<p><b>Resumo da Paula:</b> ${esc(x.resumo)}</p>` : ''}
     ${calc ? `<p><b>Medição:</b> renda ${brl(calc.renda_liquida)} · parcelas ${brl(calc.parcelas_mensais_consideradas)} (${calc.percentual_renda_comprometido}%) · sobra ${brl(calc.sobra_mensal)} vs mínimo ${brl(calc.minimo_existencial)} · ${calc.credores_considerados} credor(es) · saldo ${brl(calc.saldo_total_considerado)} · indicativo <b>${esc(calc.indicativo)}</b></p>` : ''}
     ${dividas.length ? '<ul>' + dividas.map(d => `<li>${esc(d.credor)} · ${esc(d.tipo)} · ${brl(d.parcela_mensal)}/mês · saldo ${brl(d.saldo_total)}</li>`).join('') + '</ul>' : ''}
-    <p><b>Captação:</b> ${x.docs}/3 documentos${x.cpf ? ' · CPF ok' : ''} · entrada: ${x.pagamento ? esc(x.pagamento) : '—'}${x.cobranca?.url ? ` · <a href="${esc(x.cobranca.url)}" target="_blank">cobrança</a>` : ''}${x.pago_em ? ' · <span class="ok">paga ' + dt(x.pago_em) + '</span>' : ''}</p>
+    <p><b>Captação:</b> ${x.docs} documento(s)${x.cpf ? ' · CPF ok' : ''} · entrada: ${x.pagamento ? esc(x.pagamento) : '—'}${x.cobranca?.url ? ` · <a href="${esc(x.cobranca.url)}" target="_blank">cobrança</a>` : ''}${x.pago_em ? ' · <span class="ok">paga ' + dt(x.pago_em) + '</span>' : ''}</p>
     ${x.assinaturas.length ? '<ul>' + x.assinaturas.map(a => `<li>${esc(a.nome)}: <b class="${a.status === 'assinado' ? 'ok' : 'warn'}">${esc(a.status)}</b> · <a href="${esc(a.link)}" target="_blank">link</a></li>`).join('') + '</ul>' : ''}
     ${x.processo ? `<p><b>Processo:</b> ${esc(x.processo.numero || 'sem número (petição em preparação)')} · ${esc(x.processo.status_processo || '')} ${esc([x.processo.tribunal, x.processo.vara, x.processo.comarca].filter(Boolean).join(' · '))}</p>` : ''}
     ${x.followup_n ? `<p class="mut">${x.followup_n} follow-up(s), último ${dt(x.followup_em)}</p>` : ''}

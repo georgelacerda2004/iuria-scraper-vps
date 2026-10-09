@@ -1,6 +1,6 @@
 // Fluxo da conversa: recepção → consentimento → triagem por IA → handoff/encerrado.
 import { responder } from './cerebro.js';
-import { receberDocumento, concluirCadastro, verificarConclusao, pagamentoDiferido, modoEntrada, MSG as CAP } from './captacao.js';
+import { receberDocumento, concluirCadastro, verificarConclusao, guardarExtra, pagamentoDiferido, modoEntrada, MSG as CAP } from './captacao.js';
 import { resumoProcesso } from './iuria.js';
 
 const NOME_ROBO = process.env.NOME_ROBO || 'Paula';
@@ -86,7 +86,10 @@ export async function proximoPasso(conversa, ev, opts = {}) {
     return { respostas: [CAP.aguardando(pend)], patch: r?.patch || {} };
   }
   if (etapa === 'cliente') {
-    if (ev.mediaId && !texto) return { respostas: ['Recebi, guardei na sua pasta. O advogado já tem acesso.'], patch: {} };
+    if (ev.mediaId) {
+      try { return await guardarExtra(conversa, ev, opts.captacao); }
+      catch (e) { console.error('[fluxo] guardarExtra:', e.message); return { respostas: ['Recebi o arquivo. Vou guardar na sua pasta e o advogado já tem acesso.'], patch: {} }; }
+    }
     // Pós-contratação: a Paula responde com os dados do processo (número, status, últimos andamentos).
     let contexto = '';
     try { contexto = await (opts.resumoProcesso || resumoProcesso)(conversa.processo_id); } catch (e) { console.warn('[fluxo] resumoProcesso:', e.message); }

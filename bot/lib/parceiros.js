@@ -20,11 +20,11 @@ export function montarRouter() {
   // Cadastro: cria o advogado com termo aceito e manda o link de acesso por e-mail.
   r.post('/api/cadastro', async (req, res) => {
     try {
-      const s = db(); if (!s) return res.status(503).json({ erro: 'sem banco' });
       const b = req.body || {};
       const nome = limpo(b.nome), oab = limpo(b.oab, 20), uf = limpo(b.uf, 2).toUpperCase(), email = limpo(b.email).toLowerCase();
       if (!nome || !oab || !uf || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ erro: 'nome, OAB, UF e e-mail são obrigatórios' });
       if (b.aceite !== true) return res.status(400).json({ erro: 'é preciso aceitar o termo' });
+      const s = db(); if (!s) return res.status(503).json({ erro: 'sem banco' });
       const ip = (req.get('x-forwarded-for') || req.ip || '').split(',')[0].trim();
       const linha = { nome, oab, uf, email, whatsapp: limpo(b.whatsapp, 20).replace(/\D/g, '') || null, cpf_cnpj: limpo(b.cpf_cnpj, 20).replace(/\D/g, '') || null, cidade: limpo(b.cidade) || null, termo_versao: TERMO_VERSAO, termo_aceito_em: new Date().toISOString(), termo_ip: ip, ativo: true };
       const { data, error } = await s.from('se_advogados').upsert(linha, { onConflict: 'email' }).select('id,nome,email,token').single();

@@ -118,7 +118,7 @@ const { gerarTodos } = await import('../lib/documentos.js');
 const clienteFake = { id: 'cli-1', nome: 'Maria Silva Souza', cpf: '123.456.789-09', rg: '12.345.678-9', endereco: 'Rua A, 10', bairro: 'Centro', cidade: 'São Paulo', uf: 'SP', cep: '01000-000', criado_por: 'u1' };
 const triagemFake = { resumo: 'ok', fonte_renda: 'clt', calculo: { renda_liquida: 3000, parcelas_mensais_consideradas: 1300, percentual_renda_comprometido: 43.3, sobra_mensal: -600, minimo_existencial: 600 }, dividas: [{ credor: 'Banco A', tipo: 'consignado', parcela_mensal: 900, saldo_total: 20000 }] };
 const pdfs = await gerarTodos(clienteFake, triagemFake);
-assert.equal(pdfs.length, 3);
+assert.equal(pdfs.length, 4); assert.equal(pdfs[3].tipo, 'se_hipossuficiencia');
 const pdfsDif = await gerarTodos(clienteFake, { ...triagemFake, pagamento: 'apos_liminar' });
 assert.ok(pdfsDif[1].pdf.length > 1500 && pdfsDif[1].pdf.length !== pdfs[1].pdf.length, 'contrato diferido deveria mudar');
 for (const d of pdfs) { assert.ok(d.pdf.length > 1500, d.tipo + ' pequeno demais'); assert.equal(d.pdf.subarray(0, 4).toString(), '%PDF'); }
@@ -139,21 +139,30 @@ assert.equal(d1.patch.triagem.dados.cpf, '12345678909');
 assert.match(d1.respostas[0], /comprovante de endereço/);
 conv = { ...conv, ...d1.patch };
 const d2 = await receberDocumento(conv, { mediaId: 'm2', tipo: 'image' }, capDeps); conv = { ...conv, ...d2.patch };
-const d3 = await receberDocumento(conv, { mediaId: 'm3', tipo: 'document' }, capDeps); conv = { ...conv, ...d3.patch };
-assert.equal(d3.acao, 'concluir');
+const d3b = await receberDocumento(conv, { mediaId: 'm3', tipo: 'document' }, capDeps); conv = { ...conv, ...d3b.patch };
+assert.equal(d3b.acao, undefined); assert.match(d3b.respostas[0], /comprovantes das dívidas/);
+// dívidas: dois arquivos, depois "pronto" → conclui com docs_dividas = 2
+let dv = await receberDocumento(conv, { mediaId: 'm4', tipo: 'image' }, capDeps); conv = { ...conv, ...dv.patch }; assert.match(dv.respostas[0], /1 arquivo das/);
+dv = await receberDocumento(conv, { mediaId: 'm5', tipo: 'document' }, capDeps); conv = { ...conv, ...dv.patch }; assert.match(dv.respostas[0], /2 arquivos/);
+assert.equal(conv.triagem.documentos.dividas_pendentes.length, 2);
+const d3 = await receberDocumento(conv, { texto: 'pronto' }, capDeps); conv = { ...conv, ...d3.patch };
+assert.equal(d3.acao, 'concluir'); assert.equal(conv.triagem.documentos.dividas.length, 2); assert.equal(conv.triagem.docs_dividas, 2); assert.equal(conv.triagem.documentos.dividas_pendentes, undefined);
 assert.equal(conv.triagem.dados.endereco, 'Rua A, 10');
+// "pular" sem arquivos → lista vazia e conclui
+{ const c2 = { ...conv, triagem: { ...conv.triagem, documentos: { pessoal: conv.triagem.documentos.pessoal, endereco: conv.triagem.documentos.endereco, renda: conv.triagem.documentos.renda } } }; const p = await receberDocumento(c2, { texto: 'pular' }, capDeps); assert.equal(p.acao, 'concluir'); assert.deepEqual(p.patch.triagem.documentos.dividas, []); }
 
 // --- captacao: cadastro + cobrança + assinatura (tudo simulado) ---
-const enviados = [];
+const enviados = [], registrados = [];
 const cc = await concluirCadastro(conv, {
   criarCliente: async ({ dados }) => ({ ...clienteFake, nome: dados.nome }),
-  registrarDoc: async () => {},
+  registrarDoc: async (d) => { registrados.push(d); assert.ok(['RG', 'Comprovante de residência', 'Holerite', 'Outro'].includes(d.tipo), 'tipo fora do CHECK: ' + d.tipo); },
   asaasCliente: async () => 'cus_1',
   asaasCobranca: async ({ referencia, valor }) => { assert.equal(referencia, 'SE|c1'); assert.equal(valor, 500); return { id: 'pay_1', url: 'https://asaas/pay_1' }; },
   enviar: async ({ tipoDoc }) => { enviados.push(tipoDoc); return { autentiqueId: 'autq_' + tipoDoc, link: 'https://autentique/' + tipoDoc }; },
 });
 assert.equal(cc.patch.etapa, 'pagamento_assinatura');
-assert.deepEqual(enviados, ['se_procuracao', 'se_contrato', 'se_declaracao']);
+assert.deepEqual(enviados, ['se_procuracao', 'se_contrato', 'se_declaracao', 'se_hipossuficiencia']);
+assert.equal(registrados.length, 5); // 3 pessoais + 2 comprovantes de dívida
 assert.match(cc.respostas[0], /https:\/\/asaas\/pay_1/);
 assert.match(cc.respostas[0], /3\. Declaração/);
 let cobrou = false;
@@ -254,7 +263,7 @@ console.log('smoke ok (peticao + campanha)');
 {
   const { cpfValido, receberDocumento, MSG: CAPM } = await import('../lib/captacao.js');
   if (!cpfValido('529.982.247-25') || cpfValido('111.111.111-11') || cpfValido('123')) throw new Error('cpfValido errado');
-  const docs = { pessoal: { path: 'a' }, endereco: { path: 'b' }, renda: { path: 'c' } };
+  const docs = { pessoal: { path: 'a' }, endereco: { path: 'b' }, renda: { path: 'c' }, dividas: [] };
   let r = await receberDocumento({ id: 'x', triagem: { dados: { nome: 'Teste' }, documentos: docs } }, { texto: 'oi' });
   if (r.acao || r.respostas[0] !== CAPM.pedirCpf) throw new Error('deveria pedir CPF');
   r = await receberDocumento({ id: 'x', triagem: { dados: { nome: 'Teste' }, documentos: docs } }, { texto: 'meu cpf é 529.982.247-25' });
@@ -380,4 +389,28 @@ console.log('smoke ok (peticao + campanha)');
   assert.match(await (await fetch(`http://127.0.0.1:${porta}/parceiros/`)).text(), /Advogados parceiros/);
   srv.close();
   console.log('smoke ok (mercado)');
+}
+
+// --- fechamento: projeção do plano, checklist e briefing ---
+{
+  const { projetarPlano, checklistFechamento, briefingFechamento } = await import('../lib/plano.js');
+  const t = { resultado: 'favoravel', pagamento: 'apos_liminar', resumo: 'Pensionista.', dados: { cpf: '12345678909' }, documentos: { pessoal: { path: 'a' }, endereco: { path: 'b' }, renda: { path: 'c' }, dividas: [{ path: 'd' }] }, calculo: { renda_liquida: 760, parcelas_mensais_consideradas: 600, percentual_renda_comprometido: 78.9, sobra_mensal: 160, saldo_total_considerado: 6000, credores_considerados: 4 } };
+  const p = projetarPlano(t);
+  assert.equal(p.parcela_proposta, 160); // min(760-600, 30% de 760=228) = 160
+  assert.equal(p.prazo_meses, 38); assert.equal(p.reducao_mensal, 440); assert.equal(p.valor_da_causa, 6000); assert.equal(p.cabe_no_prazo, true);
+  assert.equal(projetarPlano({}), null);
+  const p2 = projetarPlano({ calculo: { renda_liquida: 3000, parcelas_mensais_consideradas: 1300, saldo_total_considerado: 90000 } });
+  assert.equal(p2.parcela_proposta, 900); assert.equal(p2.prazo_meses, 60); assert.equal(p2.cabe_no_prazo, false);
+  const ass = [{ nome: 'Procuração - Superendividamento', status: 'assinado' }, { nome: 'Contrato de Honorários - Superendividamento', status: 'assinado' }, { nome: 'Declaração de Superendividamento', status: 'assinado' }, { nome: 'Declaração de Hipossuficiência (Justiça Gratuita)', status: 'pendente' }];
+  let ck = checklistFechamento({ conversa: { triagem: t, cliente_id: 'c', processo_id: 'p' }, assinaturas: ass, distribuicao: { id: 'abcdef12' } });
+  assert.equal(ck.pronto_para_advogado, false); assert.deepEqual(ck.faltam, ['Declaração de hipossuficiência (justiça gratuita) assinada']);
+  ass[3].status = 'assinado';
+  ck = checklistFechamento({ conversa: { triagem: t, cliente_id: 'c', processo_id: 'p' }, assinaturas: ass, distribuicao: { id: 'abcdef12' } });
+  assert.equal(ck.pronto_para_advogado, true);
+  const b = briefingFechamento({ conversa: { triagem: t, nome_perfil: 'Jane' }, plano: p, checklist: ck });
+  assert.match(b, /^FECHADO ✅/); assert.match(b, /R\$ 160,00\/mês/); assert.match(b, /Valor da causa: R\$ 6\.000,00/);
+  // fluxo cliente: arquivo vira comprovante de dívida guardado
+  const g = await proximoPasso({ etapa: 'cliente', cliente_id: 'cli', triagem: {} }, { mediaId: 'm9', tipo: 'image' }, { captacao: { baixar: async () => ({ buffer: Buffer.from('x'), mime: 'image/jpeg' }), guardar: async () => 'p/x.jpg', classificar: async () => ({ tipo: 'Boleto', dados: {} }), registrarDoc: async (d) => { assert.equal(d.tipo, 'Boleto'); } } });
+  assert.match(g.respostas[0], /guardei/); assert.equal(g.patch.triagem.docs_dividas, 1);
+  console.log('smoke ok (fechamento)');
 }

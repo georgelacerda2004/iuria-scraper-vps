@@ -7,6 +7,7 @@ import { db, atualizarConversa } from './db.js';
 import { insightsPorAnuncio, leadsPorAnuncio } from './campanha.js';
 import { statusAssinaturas } from './iuria.js';
 import { criarOferta, ETAPAS_OFERTAVEIS } from './mercado.js';
+import { projetarPlano, checklistFechamento, briefingFechamento } from './plano.js';
 import { MSG } from './fluxo.js';
 import { sendText } from './whatsapp.js';
 import { gravarMensagem } from './db.js';
@@ -100,7 +101,7 @@ export function montarRouter({ senha = process.env.PAINEL_SENHA } = {}) {
           custo_conversa: a.conversas ? a.gasto / a.conversas : null, custo_lead: l.leads ? a.gasto / l.leads : null, custo_qualificado: l.qualificados ? a.gasto / l.qualificados : null, custo_pago: l.pagos ? a.gasto / l.pagos : null };
       });
       const tot = anuncios.reduce((s, a) => ({ gasto: s.gasto + a.gasto, hoje: s.hoje + a.hoje.gasto, conversas: s.conversas + a.conversas, leads: s.leads + a.leads, qualificados: s.qualificados + a.qualificados, pagos: s.pagos + a.pagos }), { gasto: 0, hoje: 0, conversas: 0, leads: 0, qualificados: 0, pagos: 0 });
-      res.json({ agora: new Date().toISOString(), funil: funil(conversas), conversas, campanha: { anuncios, total: tot, erro: m.erro || null, atualizado_em: new Date(cacheMeta.em).toISOString(), orcamento_dia: Number(process.env.CAMPANHA_ORCAMENTO_DIA || 100), entrada: Number(process.env.HONORARIOS_ENTRADA || 500) } });
+      res.json({ agora: new Date().toISOString(), mercado_ativo: process.env.MERCADO_ATIVO === 'on', funil: funil(conversas), conversas, campanha: { anuncios, total: tot, erro: m.erro || null, atualizado_em: new Date(cacheMeta.em).toISOString(), orcamento_dia: Number(process.env.CAMPANHA_ORCAMENTO_DIA || 100), entrada: Number(process.env.HONORARIOS_ENTRADA || 500) } });
     } catch (e) { res.status(500).json({ erro: e.message }); }
   });
   r.get('/api/conversas/:id', async (req, res) => {
@@ -112,9 +113,15 @@ export function montarRouter({ senha = process.env.PAINEL_SENHA } = {}) {
       const ids = (c.triagem?.assinaturas || []).map(a => a.autentiqueId).filter(Boolean);
       const ass = ids.length ? await statusAssinaturas(ids).catch(() => []) : [];
       const assinaturas = (c.triagem?.assinaturas || []).map(a => ({ nome: a.nome, link: a.link, status: ass.find(x => x.autentique_id === a.autentiqueId)?.status || 'pendente' }));
-      let processo = null;
-      if (c.processo_id) { const { data: p } = await s.from('processos').select('numero,status_processo,fase,tribunal,vara,comarca').eq('id', c.processo_id).maybeSingle(); processo = p; }
-      res.json({ ...resumirConversa(c), triagem: c.triagem, mensagens: msgs || [], assinaturas, cobranca: c.triagem?.cobranca || null, processo });
+      let processo = null, distribuicao = null;
+      if (c.processo_id) {
+        const { data: p } = await s.from('processos').select('numero,status_processo,fase,tribunal,vara,comarca').eq('id', c.processo_id).maybeSingle(); processo = p;
+        const { data: d } = await s.from('distribuicoes').select('id,status,valor_causa,created_at').eq('processo_id', c.processo_id).order('created_at', { ascending: false }).limit(1).maybeSingle(); distribuicao = d;
+      }
+      const plano = projetarPlano(c.triagem || {});
+      const checklist = checklistFechamento({ conversa: c, assinaturas, processo, distribuicao });
+      const briefing = briefingFechamento({ conversa: c, plano, checklist });
+      res.json({ ...resumirConversa(c), triagem: c.triagem, mensagens: msgs || [], assinaturas, cobranca: c.triagem?.cobranca || null, processo, distribuicao, plano, checklist, briefing });
     } catch (e) { res.status(500).json({ erro: e.message }); }
   });
   // Ações do operador: devolver à Paula (retomar), assumir (handoff: a Paula fica quieta) ou oferecer a advogados

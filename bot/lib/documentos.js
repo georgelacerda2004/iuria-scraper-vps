@@ -115,11 +115,24 @@ export async function gerarDeclaracao(c, triagem = {}) {
   doc.end(); return done;
 }
 
+// Declaração de hipossuficiência (justiça gratuita, art. 98 e 99 §3º do CPC).
+export async function gerarHipossuficiencia(c, triagem = {}) {
+  const { doc, done } = novoDoc();
+  const calc = triagem.calculo || {};
+  titulo(doc, 'Declaração de Hipossuficiência');
+  par(doc, `Eu, ${qualificacao(c)}, DECLARO, sob as penas da lei, para os fins do art. 98 e do art. 99, § 3º, do Código de Processo Civil, e do art. 5º, LXXIV, da Constituição Federal, que não possuo condições de arcar com as custas, despesas processuais e honorários advocatícios sem prejuízo do sustento próprio e da minha família.`);
+  par(doc, `Minha renda líquida mensal declarada é de ${brl(calc.renda_liquida)}${calc.parcelas_mensais_consideradas ? `, da qual ${brl(calc.parcelas_mensais_consideradas)} (${calc.percentual_renda_comprometido ?? '-'}%) estão comprometidos com dívidas de consumo` : ''}, situação que motiva o pedido de repactuação de dívidas previsto na Lei 14.181/2021.`);
+  par(doc, 'Requeiro, por isso, a concessão dos benefícios da justiça gratuita. Estou ciente de que a falsidade desta declaração sujeita-me ao pagamento das custas em até o décuplo (art. 100, parágrafo único, do CPC) e às sanções do art. 299 do Código Penal.');
+  localData(doc, c); assinatura(doc, c.nome, c.cpf ? `CPF nº ${c.cpf}` : '');
+  doc.end(); return done;
+}
+
 export async function gerarTodos(cliente, triagem) {
-  const [procuracao, contrato, declaracao] = await Promise.all([gerarProcuracao(cliente), gerarContrato(cliente, triagem), gerarDeclaracao(cliente, triagem)]);
+  const [procuracao, contrato, declaracao, hipo] = await Promise.all([gerarProcuracao(cliente), gerarContrato(cliente, triagem), gerarDeclaracao(cliente, triagem), gerarHipossuficiencia(cliente, triagem)]);
   return [
     { tipo: 'se_procuracao', nome: 'Procuração - Superendividamento', pdf: procuracao },
     { tipo: 'se_contrato', nome: 'Contrato de Honorários - Superendividamento', pdf: contrato },
     { tipo: 'se_declaracao', nome: 'Declaração de Superendividamento', pdf: declaracao },
+    { tipo: 'se_hipossuficiencia', nome: 'Declaração de Hipossuficiência (Justiça Gratuita)', pdf: hipo },
   ];
 }
