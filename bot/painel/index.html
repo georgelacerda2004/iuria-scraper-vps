@@ -28,7 +28,18 @@
   .msg { max-width:88%; padding:8px 10px; border-radius:12px; margin:6px 0; white-space:pre-wrap; font-size:13px } .in { background:var(--chip); margin-right:auto } .out { background:#dcfce7; color:#14532d; margin-left:auto } @media (prefers-color-scheme: dark) { .out { background:#14532d; color:#dcfce7 } }
   .msg small { display:block; color:var(--mut); font-size:11px; margin-top:3px }
   .bar { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 } .filtros { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 }
-  @media (max-width:700px) { .hide-m { display:none } td, th { padding:6px 6px } }
+  .check { padding-left:18px; font-size:13px; columns:2; column-gap:16px }
+  .protocolo .st { font-weight:700; font-size:15px; text-transform:uppercase; letter-spacing:.02em; margin:2px 0 6px }
+  button.grande { padding:14px 16px; font-size:16px; font-weight:600; width:100%; border-radius:10px }
+  #det .box pre { font-size:13px; overflow-x:auto }
+  @media (max-width:700px) {
+    .hide-m { display:none } td, th { padding:6px 6px }
+    main { padding:10px 12px 40px } header { padding:8px 12px }
+    #det .box { width:100%; padding:12px; border-left:0 }
+    .bar { gap:6px } .bar button, .bar .chip { flex:1 1 46%; text-align:center; min-height:40px; display:inline-flex; align-items:center; justify-content:center }
+    .bar button.grande { flex-basis:100% }
+    .check { columns:1 } .tile b { font-size:18px } table { font-size:12px } .grid { grid-template-columns:repeat(2,1fr) }
+  }
 </style>
 </head>
 <body>
@@ -125,6 +136,7 @@ async function abrir(id) {
     <div class="bar"><button onclick="fechar()">← voltar</button><a class="chip" href="https://wa.me/${x.wa_id}" target="_blank">abrir no WhatsApp</a><button onclick="mensagem('${x.id}')">Mandar mensagem como Paula</button>${x.etapa !== 'handoff' ? `<button onclick="acao('${x.id}','assumir')">Assumir (Paula para)</button>` : ''}${['handoff', 'desistiu', 'encerrado', 'inviavel'].includes(x.etapa) ? `<button class="p" onclick="acao('${x.id}','retomar')">Devolver à Paula</button>` : ''}${DADOS?.mercado_ativo && ['triagem', 'proposta', 'docs', 'desistiu', 'handoff', 'inviavel', 'encerrado', 'consentimento'].includes(x.etapa) ? `<button onclick="acao('${x.id}','oferecer')">Oferecer a advogados</button>` : ''}</div>
     <h2 style="margin-top:6px">${esc(x.nome) || '—'} · ${esc(x.telefone)}</h2>
     <p>${temp(x)} <span class="chip">${esc(x.rotulo)}</span> ${x.ad_id ? '<span class="chip">anúncio ' + esc(x.ad_id) + '</span>' : ''} <span class="mut">chegou ${dt(x.criado_em)}</span></p>
+    ${x.distribuicao ? blocoProtocolo(x) : ''}
     ${x.handoff_motivo ? `<p class="warn"><b>Motivo do handoff:</b> ${esc(x.handoff_motivo)}</p>` : ''}
     ${x.checklist ? `<div class="tile" style="border-left:4px solid ${x.checklist.pronto_para_advogado ? 'var(--ok)' : 'var(--warn)'};margin:10px 0">
       <b class="${x.checklist.pronto_para_advogado ? 'ok' : 'warn'}" style="font-size:16px">${x.checklist.pronto_para_advogado ? '✔ FECHADO · pronto para protocolar' : `Em fechamento · ${x.checklist.feitos}/${x.checklist.total}`}</b>
@@ -135,8 +147,7 @@ async function abrir(id) {
         <tr><td>Prazo</td><td class="right">—</td><td class="right">${x.plano.prazo_meses} meses</td></tr>
         <tr><td>Saldo das dívidas / valor da causa</td><td class="right">${brl(x.plano.saldo)}</td><td class="right">${brl(x.plano.total_no_plano)} no plano${x.plano.cabe_no_prazo ? '' : ' <span class="bad">(não cobre o saldo)</span>'}</td></tr></table>
         <p class="mut" style="font-size:12px">Liminar: ${esc(x.plano.pedidos.liminar)}. ${esc(x.plano.aviso)}</p>` : ''}
-      <ul style="columns:2;column-gap:16px;padding-left:18px;font-size:13px">${x.checklist.itens.map(i => `<li class="${i.feito ? 'ok' : 'mut'}">${i.feito ? '✔' : '○'} ${esc(i.rotulo)}${i.detalhe ? ` <small>· ${esc(i.detalhe)}</small>` : ''}</li>`).join('')}</ul>
-      ${x.distribuicao ? blocoProtocolo(x) : ''}
+      <ul class="check">${x.checklist.itens.map(i => `<li class="${i.feito ? 'ok' : 'mut'}">${i.feito ? '✔' : '○'} ${esc(i.rotulo)}${i.detalhe ? ` <small>· ${esc(i.detalhe)}</small>` : ''}</li>`).join('')}</ul>
     </div>` : ''}
     ${x.resumo ? `<p><b>Resumo da Paula:</b> ${esc(x.resumo)}</p>` : ''}
     ${calc ? `<p><b>Medição:</b> renda ${brl(calc.renda_liquida)} · parcelas ${brl(calc.parcelas_mensais_consideradas)} (${calc.percentual_renda_comprometido}%) · sobra ${brl(calc.sobra_mensal)} vs mínimo ${brl(calc.minimo_existencial)} · ${calc.credores_considerados} credor(es) · saldo ${brl(calc.saldo_total_considerado)} · indicativo <b>${esc(calc.indicativo)}</b></p>` : ''}
@@ -152,13 +163,15 @@ const ST = { rascunho: 'petição gerada, montando PDFs', pronta: 'PRONTA PARA P
 function blocoProtocolo(x) {
   const d = x.distribuicao, pg = d.progresso || {}, rs = d.resultado || {};
   const arq = (pg.pacote || []).map(a => `<li><a href="/painel/api/arquivo?path=${encodeURIComponent(a.storage_path)}&senha=${encodeURIComponent(senha())}" target="_blank">${esc(a.nome)}</a> <small>(${esc(a.tipo)}${a.origem === 'convertido' ? ', convertido de imagem' : ''})</small></li>`).join('');
-  const botoes = ['pronta', 'erro'].includes(d.status) ? `<button class="p" onclick="aprovarProtocolo('${d.id}')">Aprovar e protocolar</button>` : d.status === 'aprovada' ? `<button onclick="reabrirProtocolo('${d.id}')">Cancelar aprovação</button>` : '';
-  return `<div class="card"><p><b>Protocolo:</b> ${esc(ST[d.status] || d.status)} · valor da causa ${brl(d.valor_causa)} · distribuição ${esc(String(d.id).slice(0, 8))} · ${dt(d.created_at)}${d.entrevista_id ? ` · <a href="/painel/api/peticao/${esc(d.entrevista_id)}?senha=${encodeURIComponent(senha())}" target="_blank">abrir petição</a>` : ''}</p>
+  const botoes = ['pronta', 'erro'].includes(d.status) ? `<button class="p grande" onclick="aprovarProtocolo('${d.id}')">✔ Aprovar e protocolar</button>` : d.status === 'aprovada' ? `<button class="grande" onclick="reabrirProtocolo('${d.id}')">Cancelar aprovação</button>` : '';
+  const cor = d.status === 'protocolada' ? 'var(--ok)' : d.status === 'erro' ? 'var(--bad)' : d.status === 'pronta' ? 'var(--acc)' : 'var(--warn)';
+  return `<div class="card protocolo" style="border-left:5px solid ${cor}"><div class="st">${esc(ST[d.status] || d.status)}</div>
+    <div class="bar">${botoes}</div>
+    <p>Valor da causa <b>${brl(d.valor_causa)}</b> · distribuição ${esc(String(d.id).slice(0, 8))} · ${dt(d.created_at)}${d.entrevista_id ? ` · <a href="/painel/api/peticao/${esc(d.entrevista_id)}?senha=${encodeURIComponent(senha())}" target="_blank">abrir petição</a>` : ''}</p>
     ${d.numero_processo ? `<p><b>Número do processo:</b> ${esc(d.numero_processo)}${rs.recibo_path ? ` · <a href="/painel/api/arquivo?path=${encodeURIComponent(rs.recibo_path)}&senha=${encodeURIComponent(senha())}" target="_blank">recibo</a>` : ''}</p>` : ''}
     ${d.status === 'erro' ? `<p style="color:#b00"><b>Erro do robô:</b> ${esc(rs.erro || '')}${rs.tela_path ? ` · <a href="/painel/api/arquivo?path=${encodeURIComponent(rs.tela_path)}&senha=${encodeURIComponent(senha())}" target="_blank">ver tela</a>` : ''}</p>` : ''}
     ${arq ? `<p><b>PDFs do pacote (${(pg.pacote || []).length}):</b></p><ul>${arq}</ul>` : ''}${(pg.avisos || []).length ? `<p><small>Avisos: ${esc(pg.avisos.join('; '))}</small></p>` : ''}
-    ${pg.aprovado_em ? `<p><small>Aprovado por ${esc(pg.aprovado_por || '')} em ${dt(pg.aprovado_em)}</small></p>` : ''}
-    <div class="bar">${botoes}</div></div>`;
+    ${pg.aprovado_em ? `<p><small>Aprovado por ${esc(pg.aprovado_por || '')} em ${dt(pg.aprovado_em)}</small></p>` : ''}</div>`;
 }
 async function aprovarProtocolo(id) { const por = prompt('Quem aprova (nome do advogado)? Este toque autoriza o robô a protocolar com o certificado A3.'); if (!por) return; try { await api(`/distribuicoes/${id}/aprovar`, { method: 'POST', body: JSON.stringify({ por }) }); alert('Aprovado. O robô do escritório pega na fila em até 1 minuto.'); await carregar(); abrir(ABERTO); } catch (e) { alert(e.message); } }
 async function reabrirProtocolo(id) { if (!confirm('Cancelar a aprovação? O robô não vai protocolar.')) return; try { await api(`/distribuicoes/${id}/reabrir`, { method: 'POST' }); await carregar(); abrir(ABERTO); } catch (e) { alert(e.message); } }
