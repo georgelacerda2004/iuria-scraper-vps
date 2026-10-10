@@ -14,6 +14,8 @@ import { chromium } from 'playwright';
 
 const ARGS = new Set(process.argv.slice(2));
 const ASSISTIDO = ARGS.has('--assistido'), ENSAIO = ARGS.has('--ensaio'), UMA_VEZ = ARGS.has('--uma-vez');
+// --item=<início do id da distribuição> escolhe um item específico da fila (ex.: --item=220cbdea para a Silvana).
+const ITEM = (process.argv.find(a => a.startsWith('--item=')) || '').slice(7).toLowerCase();
 const CFG = JSON.parse(fs.readFileSync(new URL('./config.json', import.meta.url), 'utf8'));
 const PASSOS = JSON.parse(fs.readFileSync(new URL('./passos-esaj.json', import.meta.url), 'utf8')).passos;
 const RE_NUMERO = /\d{7}-\d{2}\.\d{4}\.8\.26\.\d{4}/;
@@ -83,7 +85,9 @@ async function executar(page, passo, item, arquivos) {
 
 async function protocolar(item) {
   const arquivos = await baixar(item);
-  const ctx = await chromium.launchPersistentContext(CFG.perfil_chrome, { channel: 'chrome', headless: false, viewport: null, acceptDownloads: true, args: ['--start-maximized'] });
+  // cdp_porta no config.json abre a porta de depuração do Chrome (só para mapear telas no ensaio; deixe vazio em produção).
+  const args = ['--start-maximized', ...(CFG.cdp_porta ? [`--remote-debugging-port=${CFG.cdp_porta}`] : [])];
+  const ctx = await chromium.launchPersistentContext(CFG.perfil_chrome, { channel: 'chrome', headless: false, viewport: null, acceptDownloads: true, args });
   const page = ctx.pages()[0] || await ctx.newPage();
   const trilha = [];
   try {
@@ -119,7 +123,9 @@ async function protocolar(item) {
 async function ciclo() {
   // No ensaio vale um item só 'pronta' (ainda sem aprovação): nada é protocolado nem enviado ao painel.
   const { itens } = await api(ENSAIO ? '/fila?incluir=pronta' : '/fila');
-  const item = itens.find(i => i.status === 'aprovada') || (ENSAIO ? itens.find(i => i.status === 'pronta') : null);
+  const elegiveis = itens.filter(i => i.status === 'aprovada' || (ENSAIO && i.status === 'pronta')).filter(i => !ITEM || i.distribuicao_id.toLowerCase().startsWith(ITEM));
+  const item = elegiveis.find(i => i.status === 'aprovada') || elegiveis[0];
+  if (ITEM && !item) { log(`item ${ITEM} não está na fila (ou não está aprovado)`); return false; }
   if (!item) { log('fila vazia'); return false; }
   log(`item ${item.distribuicao_id.slice(0, 8)} — ${item.cliente?.nome} — ${item.classe} — R$ ${item.valor_causa}`);
   if (!ENSAIO) await api(`/fila/${item.distribuicao_id}/pegar`, { method: 'POST', body: JSON.stringify({ robo: CFG.robo }) });

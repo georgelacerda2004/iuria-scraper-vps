@@ -23,8 +23,10 @@ O PIN do token ainda é digitado pelo operador na janela do Web Signer. A digita
 
 ## 2. Primeiro teste (hoje): modo ensaio
 ```powershell
-npm run ensaio
+npm run ensaio -- --item=220cbdea     # --item escolhe a distribuição (início do id); sem ele pega a primeira da fila
 ```
+Para mapear as telas pelo CDP, coloque `"cdp_porta": 9333` no config.json durante o ensaio e volte para `null` depois.
+
 O robô abre o Chrome, pega o primeiro item aprovado da fila, baixa os PDFs para `downloads\<id>` e vai executando `passos-esaj.json`. Nos passos marcados como `pausar` ele espera você (ou o Hermes) fazer na tela e apertar Enter. Ele **para antes de "Protocolar"** e deixa o navegador aberto: salve o rascunho no e-SAJ, confira tudo e feche. Nada é enviado ao painel no ensaio.
 
 Durante o ensaio, grave as telas (o Hermes faz isso): os cliques de "Partes" e "Documentos" viram passos novos em `passos-esaj.json`, e os nomes exatos das opções de Foro, Classe e Assunto são ajustados no mesmo arquivo.

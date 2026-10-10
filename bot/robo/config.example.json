@@ -9,5 +9,6 @@
     "portal": "https://esaj.tjsp.jus.br/esaj/portal.do?servico=740000",
     "peticao_inicial": "https://esaj.tjsp.jus.br/petpg/abrirPeticaoInicial.do"
   },
-  "intervalo_segundos": 60
+  "intervalo_segundos": 60,
+  "cdp_porta": null
 }
