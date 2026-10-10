@@ -122,6 +122,13 @@ export function montarRouter({ senha = process.env.PAINEL_SENHA } = {}) {
       const { data, error } = await s.from('se_conversas').select('*').order('ultima_msg_em', { ascending: false }).limit(500);
       if (error) throw new Error(error.message);
       const conversas = (data || []).map(resumirConversa);
+      // Situação do protocolo (distribuição) dos leads fechados, para o chip na lista.
+      const pids = (data || []).map(c => c.processo_id).filter(Boolean);
+      if (pids.length) {
+        const { data: dists } = await s.from('distribuicoes').select('processo_id,status,numero_processo').in('processo_id', pids).order('created_at', { ascending: false });
+        const porProc = {}; for (const d of dists || []) if (!porProc[d.processo_id]) porProc[d.processo_id] = d;
+        (data || []).forEach((c, i) => { const d = porProc[c.processo_id]; if (d) { conversas[i].protocolo = d.status; conversas[i].numero_processo = d.numero_processo; } });
+      }
       const [m, leads7] = await Promise.all([meta(), leadsPorAnuncio({ dias: 7 }).catch(() => ({}))]);
       const anuncios = (m.semana || []).map(a => {
         const h = (m.hoje || []).find(x => x.ad_id === a.ad_id) || {};
