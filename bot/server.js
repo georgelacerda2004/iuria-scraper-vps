@@ -6,7 +6,7 @@ import { sendText, markRead } from './lib/whatsapp.js';
 import { upsertConversa, gravarMensagem, atualizarConversa, carregarHistorico } from './lib/db.js';
 import { proximoPasso } from './lib/fluxo.js';
 import { verificarConclusao, concluirCadastro, reemitirDocumentos, cpfValido, pedidoPendente, MSG as CAP } from './lib/captacao.js';
-import { EVENTOS_PAGO } from './lib/asaas.js';
+import { EVENTOS_PAGO, descreverAmbiente as ambienteAsaas } from './lib/asaas.js';
 import { db } from './lib/db.js';
 import { ciclo as cicloCampanha } from './lib/campanha.js';
 import { avisarOperador, buscarCliente, criarEntrevista } from './lib/iuria.js';
@@ -26,6 +26,7 @@ import { criarOferta, fecharOfertas, confirmarPagamentos as confirmarPagamentosO
 for (const [k, v] of Object.entries(process.env)) if (v === 'PREENCHER') delete process.env[k];
 const faltando = ['WHATSAPP_TOKEN', 'PHONE_NUMBER_ID', 'META_APP_SECRET', 'SUPABASE_SERVICE_ROLE_KEY', 'ANTHROPIC_API_KEY', 'ASAAS_API_KEY'].filter(k => !process.env[k]);
 if (faltando.length) console.warn('[bot] variáveis ainda não preenchidas:', faltando.join(', '));
+console.log('[bot]', ambienteAsaas());
 // Diagnóstico: só os NOMES das variáveis opcionais ausentes (nunca valores), para conferir o painel do Render pelo log.
 const OPCIONAIS = ['WABA_ID', 'WEBHOOK_VERIFY_TOKEN', 'SUPABASE_URL', 'CLAUDE_MODEL', 'NOME_ROBO', 'NOME_ESCRITORIO', 'ESCRITORIO_ID',
   'ADVOGADO_NOME', 'ADVOGADO_OAB', 'RESPONSAVEL_NOME', 'ESCRITORIO_ENDERECO', 'FORO_CONTRATO', 'TRIBUNAL_PADRAO', 'HONORARIOS_ENTRADA', 'HONORARIOS_EXITO_PCT',

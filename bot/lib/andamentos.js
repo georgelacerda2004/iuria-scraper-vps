@@ -3,7 +3,7 @@
 // dispara o que o contrato prevê: entrada "após a liminar" (cobrança Asaas) e registro do êxito no IURIA.
 import Anthropic from '@anthropic-ai/sdk';
 import { db, atualizarConversa } from './db.js';
-import { garantirCliente, criarCobranca } from './asaas.js';
+import { garantirCliente, criarCobranca, emProducao } from './asaas.js';
 import { avisarOperador } from './iuria.js';
 import { projetarPlano } from './plano.js';
 
@@ -75,7 +75,7 @@ export async function tratarLiminarDeferida({ conversa, cliente, processo, andam
   const agora = new Date().toISOString();
   const patch = { liminar_deferida_em: agora, liminar_andamento_id: andamento?.id || null };
   const avisos = [];
-  const producao = /api\.asaas\.com/.test(process.env.ASAAS_BASE_URL || '');
+  const producao = emProducao();
   // 1) Entrada após a liminar
   if ((triagem.pagamento === 'apos_liminar') && !triagem.cobranca?.url) {
     const valor = Number(process.env.HONORARIOS_ENTRADA || 500);
@@ -86,7 +86,7 @@ export async function tratarLiminarDeferida({ conversa, cliente, processo, andam
         patch.cobranca = { ...cob, valor, criada_em: agora, motivo: 'liminar_deferida' };
         if (s) await s.from('honorarios').update({ forma_pagamento: 'Asaas (após liminar)', observacao: `Entrada cobrada após a liminar deferida em ${agora.slice(0, 10)}. Cobrança ${cob.id}.` }).eq('processo_id', processo.id).eq('tipo', 'Contratual').eq('status', 'A receber');
       } catch (e) { avisos.push('cobrança da entrada não gerada: ' + e.message); }
-    } else avisos.push('Asaas em sandbox: cobrança da entrada NÃO gerada (configure ASAAS_BASE_URL de produção).');
+    } else avisos.push('Asaas em sandbox: cobrança da entrada NÃO gerada (coloque a chave de produção em ASAAS_API_KEY).');
   }
   // 2) Êxito projetado no IURIA
   const plano = projetarPlano(triagem);

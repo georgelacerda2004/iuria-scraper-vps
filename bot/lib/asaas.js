@@ -1,5 +1,23 @@
-// Asaas: cobrança da entrada. Sandbox por padrão; produção só com ASAAS_BASE_URL=https://api.asaas.com/v3.
-const BASE = () => (process.env.ASAAS_BASE_URL || 'https://api-sandbox.asaas.com/v3').replace(/\/+$/, '');
+// Asaas: cobrança da entrada. O ambiente é decidido pela CHAVE, não pela URL: chave de sandbox ("$aact_hmlg_...")
+// sempre fala com o sandbox, mesmo que ASAAS_BASE_URL aponte para produção (evita 401 em toda cobrança quando a URL
+// muda antes da chave). Chave de produção usa ASAAS_BASE_URL (padrão https://api.asaas.com/v3).
+const SANDBOX = 'https://api-sandbox.asaas.com/v3';
+const PRODUCAO = 'https://api.asaas.com/v3';
+export function chaveSandbox(key = process.env.ASAAS_API_KEY) { return /\$aact_hmlg_/i.test(String(key || '')); }
+export function emProducao() {
+  if (!process.env.ASAAS_API_KEY || chaveSandbox()) return false;
+  return /api\.asaas\.com/.test(process.env.ASAAS_BASE_URL || PRODUCAO);
+}
+const BASE = () => {
+  if (chaveSandbox()) return SANDBOX;
+  return (process.env.ASAAS_BASE_URL || SANDBOX).replace(/\/+$/, '');
+};
+export function descreverAmbiente() {
+  if (!process.env.ASAAS_API_KEY) return 'Asaas: sem chave (cobranças desligadas)';
+  const url = /api\.asaas\.com/.test(process.env.ASAAS_BASE_URL || '');
+  if (chaveSandbox()) return url ? 'Asaas: chave de SANDBOX com URL de produção; usando o sandbox até a chave de produção chegar' : 'Asaas: sandbox';
+  return emProducao() ? 'Asaas: PRODUÇÃO' : 'Asaas: chave de produção com URL de sandbox; ajuste ASAAS_BASE_URL';
+}
 
 async function api(path, { method = 'GET', body } = {}) {
   const key = process.env.ASAAS_API_KEY;

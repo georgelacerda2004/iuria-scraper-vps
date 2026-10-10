@@ -452,6 +452,19 @@ console.log('smoke ok (peticao + campanha)');
   console.log('smoke ok (followup)');
 }
 
+// --- asaas: ambiente decidido pela chave ---
+{
+  const { chaveSandbox, emProducao, descreverAmbiente } = await import('../lib/asaas.js');
+  const bk = { k: process.env.ASAAS_API_KEY, u: process.env.ASAAS_BASE_URL };
+  process.env.ASAAS_API_KEY = '$aact_hmlg_000abc'; process.env.ASAAS_BASE_URL = 'https://api.asaas.com/v3';
+  assert.equal(chaveSandbox(), true); assert.equal(emProducao(), false); assert.match(descreverAmbiente(), /SANDBOX com URL de produção/);
+  process.env.ASAAS_API_KEY = '$aact_prod_000abc';
+  assert.equal(emProducao(), true); assert.match(descreverAmbiente(), /PRODUÇÃO/);
+  delete process.env.ASAAS_BASE_URL; assert.equal(emProducao(), true);
+  process.env.ASAAS_API_KEY = bk.k ?? ''; if (!bk.k) delete process.env.ASAAS_API_KEY; if (bk.u) process.env.ASAAS_BASE_URL = bk.u;
+  console.log('smoke ok (asaas ambiente)');
+}
+
 // --- pós: protocolo e andamento; fluxo cliente usa a IA com contexto ---
 {
   const pos = await import('../lib/pos.js');
