@@ -120,7 +120,11 @@ export async function pegar(distribuicaoId, { s = db(), robo = 'pc' } = {}) {
 }
 
 // Resultado do robô: sucesso grava número no processo (a Paula avisa a cliente pelo pos.js); erro volta para o advogado.
-export async function registrarResultado(distribuicaoId, { ok, numero_processo, recibo_base64, recibo_nome, erro, tela_base64, detalhes } = {}, { s = db() } = {}) {
+export async function registrarResultado(distribuicaoId, corpo = {}, { s = db() } = {}) {
+  // Aceita os nomes do contrato (recibo_base64/tela_base64) e os do motor do Hermes (recibo_pdf_base64/print_base64).
+  const { ok, numero_processo, recibo_nome, erro, detalhes } = corpo;
+  const recibo_base64 = corpo.recibo_base64 || corpo.recibo_pdf_base64 || null;
+  const tela_base64 = corpo.tela_base64 || corpo.print_base64 || corpo.screenshot_base64 || null;
   const { data: d } = await s.from('distribuicoes').select('id,status,progresso,processo_id,cliente_id').eq('id', distribuicaoId).maybeSingle();
   if (!d) throw new Error('distribuição não encontrada');
   const base = `se-uploads/${d.cliente_id}/protocolo/${d.id.slice(0, 8)}`;

@@ -52,6 +52,8 @@ Erro (qualquer tela inesperada, CAPTCHA, PIN recusado, campo que não achou):
 ```json
 { "ok": false, "erro": "texto curto do que aconteceu", "tela_base64": "<PNG da tela>", "detalhes": { "passo": "anexos" } }
 ```
+O servidor também aceita os nomes usados pelo motor do Hermes: `recibo_pdf_base64` no lugar de `recibo_base64` e `print_base64` no lugar de `tela_base64`. `GET /painel/api/fila?status=aprovada` devolve só os itens aprovados (sem o parâmetro vêm `aprovada` e `em_protocolo`).
+
 No sucesso o servidor grava o número no processo do IURIA, guarda o recibo e a Paula avisa a cliente. No erro o item vai para `erro`, o advogado recebe o aviso e decide se aprova de novo.
 
 ## 4. Regras do robô

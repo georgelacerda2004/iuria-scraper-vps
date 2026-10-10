@@ -104,7 +104,14 @@ export function montarRouter({ senha = process.env.PAINEL_SENHA } = {}) {
   // Fila de protocolo: aprovação do advogado e API do robô do PC (ver docs/PROTOCOLO.md).
   r.post('/api/distribuicoes/:id/aprovar', async (req, res) => { try { res.json({ ok: true, progresso: await aprovar(req.params.id, { por: String(req.body?.por || 'painel') }) }); } catch (e) { res.status(400).json({ erro: e.message }); } });
   r.post('/api/distribuicoes/:id/reabrir', async (req, res) => { try { await reabrir(req.params.id); res.json({ ok: true }); } catch (e) { res.status(400).json({ erro: e.message }); } });
-  r.get('/api/fila', async (req, res) => { try { res.json({ itens: await fila(req.query.incluir === 'pronta' ? { status: ['aprovada', 'em_protocolo', 'pronta'] } : {}) }); } catch (e) { res.status(500).json({ erro: e.message }); } });
+  // ?status=aprovada (ou lista separada por vírgula) filtra; ?incluir=pronta acrescenta os pacotes ainda não aprovados.
+  r.get('/api/fila', async (req, res) => {
+    try {
+      const pedidos = String(req.query.status || '').split(',').map(x => x.trim()).filter(Boolean);
+      const status = pedidos.length ? pedidos : req.query.incluir === 'pronta' ? ['aprovada', 'em_protocolo', 'pronta'] : undefined;
+      res.json({ itens: await fila(status ? { status } : {}) });
+    } catch (e) { res.status(500).json({ erro: e.message }); }
+  });
   r.post('/api/fila/:id/pegar', async (req, res) => { try { await pegar(req.params.id, { robo: String(req.body?.robo || 'pc') }); res.json({ ok: true }); } catch (e) { res.status(409).json({ erro: e.message }); } });
   r.post('/api/fila/:id/resultado', express.json({ limit: '20mb' }), async (req, res) => { try { res.json({ ok: true, resultado: await registrarResultado(req.params.id, req.body || {}) }); } catch (e) { res.status(400).json({ erro: e.message }); } });
   // Petição gerada (HTML pronto para imprimir/exportar em PDF) de uma entrevista do IURIA.
