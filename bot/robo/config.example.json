@@ -10,5 +10,6 @@
     "peticao_inicial": "https://esaj.tjsp.jus.br/petpg/abrirPeticaoInicial.do"
   },
   "intervalo_segundos": 60,
-  "cdp_porta": null
+  "cdp_porta": null,
+  "certificado_nome": "ALESSANDRO"
 }

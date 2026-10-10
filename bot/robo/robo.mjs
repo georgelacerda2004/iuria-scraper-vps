@@ -66,6 +66,7 @@ async function executar(page, passo, item, arquivos) {
   const alvo = valor(passo.alvo, item), v = valor(passo.valor, item);
   const loc = alvo?.startsWith('label=') ? page.getByLabel(alvo.slice(6), { exact: false }) : alvo?.startsWith('text=') ? page.getByText(alvo.slice(5).startsWith('/') ? new RegExp(alvo.slice(6, -1)) : alvo.slice(5), { exact: false }) : alvo ? page.locator(alvo) : null;
   switch (passo.acao) {
+    case 'login_certificado': return loginCertificado(page, item);
     case 'ir': await page.goto(alvo, { waitUntil: 'domcontentloaded', timeout: 60_000 }); return true;
     case 'esperar': await loc.first().waitFor({ timeout: 120_000 }); return true;
     case 'clicar': await loc.first().click({ timeout: 15_000 }); return true;
@@ -81,6 +82,33 @@ async function executar(page, passo, item, arquivos) {
     case 'pausar': if (!ASSISTIDO && !ENSAIO) throw new Error(`passo manual pendente: ${passo.nota}`); await perguntar(`\n>>> ${passo.nota}\n>>> Faça na tela e aperte Enter para continuar... `); return true;
     default: throw new Error(`ação desconhecida: ${passo.acao}`);
   }
+}
+
+// Login do e-SAJ por certificado digital (aba "Certificado digital" do SAJCAS). Se já está logado, não faz nada.
+// A lista de certificados é preenchida pela extensão Web Signer; se ficar vazia, o problema é o Web Signer
+// (programa desatualizado ou parado) e o robô para com uma mensagem clara.
+async function loginCertificado(page, item) {
+  const url = page.url();
+  if (!/sajcas\/login/i.test(url)) { log('  já logado (ou não caiu na tela de login)'); return true; }
+  const nomeCert = (CFG.certificado_nome || '').toUpperCase();
+  await page.locator('#linkAbaCertificado, a:has-text("Certificado digital")').first().click({ timeout: 15_000 });
+  const sel = page.locator('select#certificados');
+  await sel.waitFor({ timeout: 20_000 });
+  // espera a extensão preencher o select (até 60 s)
+  let opcoes = [];
+  for (let i = 0; i < 60; i++) {
+    opcoes = (await sel.locator('option').allTextContents().catch(() => [])).filter(o => o.trim() && !/carregando|selecione/i.test(o));
+    if (opcoes.length) break;
+    await page.waitForTimeout(1000);
+  }
+  if (!opcoes.length) throw new Error('lista de certificados vazia: o Web Signer não entregou o certificado (programa desatualizado/parado ou token sem driver)');
+  const escolha = opcoes.find(o => nomeCert && o.toUpperCase().includes(nomeCert)) || opcoes[0];
+  await sel.selectOption({ label: escolha });
+  log(`  certificado: ${escolha}`);
+  await page.locator('#submitCertificado, input[name="submitCertificado"], button:has-text("Entrar")').first().click({ timeout: 15_000 });
+  await page.waitForURL(u => !/sajcas\/login/i.test(String(u)), { timeout: 120_000 }); // o PIN pode ser pedido aqui
+  log('  login ok');
+  return true;
 }
 
 async function protocolar(item) {

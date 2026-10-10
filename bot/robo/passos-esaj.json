@@ -1,19 +1,87 @@
 {
   "_comentario": "Passos do peticionamento inicial no e-SAJ TJSP. Cada passo: acao (ir|clicar|selecionar|digitar|anexar|esperar|conferir|pausar), alvo (texto do link/botão, label do campo ou seletor CSS), valor (campo do item da fila, entre chaves) e opcional 'obrigatorio'. Um passo que falha em modo assistido pausa e pede ajuda; em modo automático devolve erro com print. Ajuste os alvos depois do primeiro protocolo gravado pelo Hermes.",
   "passos": [
-    { "acao": "ir", "alvo": "{esaj.peticao_inicial}", "nota": "Se cair na tela de login, o Chrome usa o certificado do token (ver README: AutoSelectCertificateForUrls)." },
-    { "acao": "esperar", "alvo": "text=Petição Inicial", "nota": "Tela do peticionamento inicial carregada." },
-    { "acao": "selecionar", "alvo": "label=Foro", "valor": "{jurisdicao}", "obrigatorio": true },
-    { "acao": "selecionar", "alvo": "label=Competência", "valor": "{competencia}", "obrigatorio": true },
-    { "acao": "selecionar", "alvo": "label=Classe", "valor": "{classe}", "obrigatorio": true },
-    { "acao": "selecionar", "alvo": "label=Assunto principal", "valor": "{assuntos[0].nome}", "obrigatorio": true },
-    { "acao": "digitar", "alvo": "label=Valor da causa", "valor": "{valor_causa}", "obrigatorio": true },
-    { "acao": "marcar", "alvo": "label=Justiça gratuita", "valor": "{justica_gratuita}" },
-    { "acao": "marcar", "alvo": "label=Tutela antecipada/liminar", "valor": "{tutela_liminar}" },
-    { "acao": "pausar", "nota": "PARTES: o e-SAJ pede cada parte numa tela própria (requerente por CPF, requeridos por CNPJ). No primeiro protocolo o operador preenche com os dados de {partes} e o Hermes grava os cliques; depois viram passos aqui." },
-    { "acao": "pausar", "nota": "DOCUMENTOS: anexar os arquivos da pasta de downloads na ordem numérica (01 é a petição, categoria 'Petição'; os demais 'Documento'). O operador confere a categoria de cada um." },
-    { "acao": "conferir", "nota": "Antes de protocolar: foro, classe, partes com CNPJ, valor da causa, gratuidade e número de anexos. Em modo ensaio o robô PARA AQUI e salva rascunho." },
-    { "acao": "clicar", "alvo": "text=Protocolar", "obrigatorio": true, "nota": "Abre o Web Signer; o PIN é digitado pelo operador ou pelo módulo de PIN (semana 2b)." },
-    { "acao": "esperar", "alvo": "text=/\\d{7}-\\d{2}\\.\\d{4}\\.8\\.26\\.\\d{4}/", "nota": "Recibo com o número do processo." }
+    {
+      "acao": "ir",
+      "alvo": "{esaj.peticao_inicial}",
+      "nota": "Se cair na tela de login, o Chrome usa o certificado do token (ver README: AutoSelectCertificateForUrls)."
+    },
+    {
+      "acao": "login_certificado",
+      "nota": "Se o e-SAJ pedir login, entra pela aba Certificado digital (Web Signer). Pode pedir o PIN do token."
+    },
+    {
+      "acao": "ir",
+      "alvo": "{esaj.peticao_inicial}",
+      "nota": "Depois do login, volta para o peticionamento inicial."
+    },
+    {
+      "acao": "esperar",
+      "alvo": "text=Petição Inicial",
+      "nota": "Tela do peticionamento inicial carregada."
+    },
+    {
+      "acao": "selecionar",
+      "alvo": "label=Foro",
+      "valor": "{jurisdicao}",
+      "obrigatorio": true
+    },
+    {
+      "acao": "selecionar",
+      "alvo": "label=Competência",
+      "valor": "{competencia}",
+      "obrigatorio": true
+    },
+    {
+      "acao": "selecionar",
+      "alvo": "label=Classe",
+      "valor": "{classe}",
+      "obrigatorio": true
+    },
+    {
+      "acao": "selecionar",
+      "alvo": "label=Assunto principal",
+      "valor": "{assuntos[0].nome}",
+      "obrigatorio": true
+    },
+    {
+      "acao": "digitar",
+      "alvo": "label=Valor da causa",
+      "valor": "{valor_causa}",
+      "obrigatorio": true
+    },
+    {
+      "acao": "marcar",
+      "alvo": "label=Justiça gratuita",
+      "valor": "{justica_gratuita}"
+    },
+    {
+      "acao": "marcar",
+      "alvo": "label=Tutela antecipada/liminar",
+      "valor": "{tutela_liminar}"
+    },
+    {
+      "acao": "pausar",
+      "nota": "PARTES: o e-SAJ pede cada parte numa tela própria (requerente por CPF, requeridos por CNPJ). No primeiro protocolo o operador preenche com os dados de {partes} e o Hermes grava os cliques; depois viram passos aqui."
+    },
+    {
+      "acao": "pausar",
+      "nota": "DOCUMENTOS: anexar os arquivos da pasta de downloads na ordem numérica (01 é a petição, categoria 'Petição'; os demais 'Documento'). O operador confere a categoria de cada um."
+    },
+    {
+      "acao": "conferir",
+      "nota": "Antes de protocolar: foro, classe, partes com CNPJ, valor da causa, gratuidade e número de anexos. Em modo ensaio o robô PARA AQUI e salva rascunho."
+    },
+    {
+      "acao": "clicar",
+      "alvo": "text=Protocolar",
+      "obrigatorio": true,
+      "nota": "Abre o Web Signer; o PIN é digitado pelo operador ou pelo módulo de PIN (semana 2b)."
+    },
+    {
+      "acao": "esperar",
+      "alvo": "text=/\\d{7}-\\d{2}\\.\\d{4}\\.8\\.26\\.\\d{4}/",
+      "nota": "Recibo com o número do processo."
+    }
   ]
 }

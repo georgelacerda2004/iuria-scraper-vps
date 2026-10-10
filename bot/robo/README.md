@@ -12,8 +12,10 @@ npx playwright install chrome              # usa o Google Chrome instalado (nece
 copy config.example.json config.json       # edite: painel_senha (a senha do painel) e as pastas
 ```
 
+Em `config.json`, `certificado_nome` é o trecho do nome que escolhe o certificado na lista do e-SAJ (ex.: `ALESSANDRO`).
+
 Pré-requisitos no mesmo Chrome do perfil do robô (abra uma vez com `npm run ensaio` e configure):
-- Extensão **Web Signer** (Softplan) instalada e o programa Web Signer rodando (é o que assina no e-SAJ).
+- Extensão **Web Signer** (Softplan) instalada e o programa Web Signer rodando **na mesma versão da extensão** (baixe em websigner.softplan.com.br/Setup; instalar exige administrador). Versão diferente deixa a lista de certificados vazia.
 - Driver do token (SafeNet/Gemalto ou o do seu A3) instalado; o certificado aparece em `certmgr.msc` > Pessoal.
 - Para o Chrome escolher o certificado sem perguntar, crie a política no Registro (como administrador):
 ```powershell
