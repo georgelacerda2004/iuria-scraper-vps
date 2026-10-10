@@ -27,7 +27,39 @@ export function textoAndamento(c, p, a) {
   return `${nome ? nome + ', n' : 'N'}ovidade no seu processo ${p.numero}:\n\n${a.data ? a.data + ' · ' : ''}${a.tipo ? a.tipo + ': ' : ''}${(a.descricao || '').slice(0, 400)}\n\nSe quiser, me pergunta que eu explico o que isso significa. Se for algo que precise de decisão, o advogado fala com você por aqui.`;
 }
 
-export async function rodar({ deps = {} } = {}) {
+const dataBR = (iso) => !iso ? null : /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.split('-').reverse().join('/') : new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+
+// Memória do caso para a Paula falar como advogada: o que a cliente já fez, quando, e o que ainda falta.
+export function linhaDoTempo(c, p) {
+  const t = c.triagem || {};
+  const l = [];
+  if (c.criado_em) l.push(`${dataBR(c.criado_em)}: primeiro contato pelo anúncio`);
+  if (t.registrado_em) l.push(`${dataBR(t.registrado_em)}: análise do caso concluída (favorável)`);
+  if (t.proposta_aceita_em) l.push(`${dataBR(t.proposta_aceita_em)}: contratou o escritório (${t.pagamento === 'apos_liminar' ? 'entrada após a liminar' : t.pagamento === 'ad_exitum' ? 'sem entrada, só êxito' : 'entrada paga'})`);
+  const docs = Object.keys(t.documentos || {}).filter(k => !k.endsWith('_pendentes') && k !== 'dividas');
+  if (docs.length) l.push(`documentos pessoais enviados: ${docs.join(', ')}${t.docs_dividas ? `; ${t.docs_dividas} extrato(s)/contrato(s) de dívida` : ''}`);
+  if (c.assinado_em) l.push(`${dataBR(c.assinado_em)}: assinou procuração, contrato e declaração`);
+  if (p?.data_distribuicao || c.protocolo_avisado_em) l.push(`${dataBR(p?.data_distribuicao || c.protocolo_avisado_em)}: processo protocolado${p?.numero ? ' (' + p.numero + ')' : ''}`);
+  if (t.liminar_deferida_em) l.push(`${dataBR(t.liminar_deferida_em)}: liminar concedida`);
+  const pend = docsPendentes(c);
+  return `LINHA DO TEMPO DA CLIENTE:\n- ${l.join('\n- ')}\nDOCUMENTOS/INFORMAÇÕES PENDENTES: ${pend || 'nenhum'}`;
+}
+
+// Texto livre gravado pelo advogado/painel (triagem.docs_pendentes) com o que ainda falta a cliente mandar.
+export function docsPendentes(c) {
+  const t = c?.triagem || {};
+  if (t.docs_pendentes_resolvido_em) return '';
+  return String(t.docs_pendentes || '').trim();
+}
+
+export function textoDocsPendentes(c, pend) {
+  const nome = primeiro(c.nome_perfil);
+  return `${nome ? nome + ', u' : 'U'}ma coisa importante: o processo já foi distribuído, mas para o advogado conferir tudo e você não ter prejuízo, ainda falta você me mandar ${pend}.\n\nPode mandar foto ou PDF por aqui mesmo que eu guardo na sua pasta e o advogado complementa o processo. Qualquer dúvida sobre o que é, me pergunta.`;
+}
+
+// `andamentos: false` só avisa protocolos novos (roda a cada 15 min). A leitura de andamentos (e a liminar) roda
+// uma vez por dia, no horário do escritório, com `andamentos: true`.
+export async function rodar({ deps = {}, andamentos: lerAndamentos = true } = {}) {
   const s = db();
   if (!s) return { protocolos: 0, andamentos: 0 };
   const { data: convs } = await s.from('se_conversas').select('*').eq('etapa', 'cliente').not('processo_id', 'is', null).limit(100);
@@ -44,8 +76,11 @@ export async function rodar({ deps = {} } = {}) {
       if (!c.protocolo_avisado_em) {
         const ok = await mandar(c, { texto: textoProtocolo(c, p, chave, portal), template: 'se_processo_protocolado', params: [primeiro(c.nome_perfil) || 'tudo bem', p.numero, portal || linkConsulta(p, chave).split(' (')[0]] }, deps);
         if (ok) { const em = new Date().toISOString(); await atualizarConversa(c.id, { protocolo_avisado_em: em, andamento_avisado_em: em }); protocolos++; }
+        const pend = docsPendentes(c);
+        if (ok && pend) await mandar(c, { texto: textoDocsPendentes(c, pend), template: 'se_pendencia', params: [primeiro(c.nome_perfil) || 'tudo bem', pend.slice(0, 200), 'por aqui mesmo'] }, deps);
         continue; // andamentos a partir do próximo ciclo
       }
+      if (!lerAndamentos) continue;
       const novos = await (deps.andamentos || andamentosDesde)(c.processo_id, c.andamento_avisado_em);
       for (const a of novos) {
         // A Paula lê a movimentação e explica; liminar deferida dispara a entrada (se for "após a liminar") e o êxito.

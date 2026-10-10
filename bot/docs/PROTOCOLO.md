@@ -4,6 +4,8 @@ Fluxo: `rascunho` (petição gerada) → `pronta` (pacote de PDFs montado pelo s
 
 Com `PROTOCOLO_AUTO=on` (ligado em 10/10/2026 por ordem do George) o item já nasce `aprovada` assim que o pacote fica pronto: a Paula fecha o caso e o robô protocola na rodada seguinte, sem toque no painel. O botão "Cancelar aprovação" no painel continua valendo para segurar um caso.
 
+Depois do protocolo: a Paula avisa a cliente em até 15 min (número, chave e link do Portal do Cliente) e, se houver `triagem.docs_pendentes`, pede o que falta. Os andamentos (inclusive a liminar) são lidos **uma vez por dia**, às `ANDAMENTOS_HORA` (padrão 18:00 de Brasília): cada movimentação nova é classificada e explicada; liminar deferida gera a entrada após a liminar (Asaas em produção) e o êxito projetado no IURIA.
+
 ## 0. O que a fila garante desde 10/10 (pedidos do relatório do Hermes)
 - `partes.ativo[]` traz `logradouro`, `numero`, `complemento`, `bairro`, `cidade`, `uf`, `cep` e `sexo` (`sexo_inferido: true` quando deduzido pelo nome: o engine deve registrar no log).
 - `jurisdicao` na Capital vem com o **Foro Regional pelo CEP** (consulta à Competência Territorial do TJSP; cai em "São Paulo - Foro Central Cível" se a consulta falhar). Fora da Capital: "Foro de <Cidade>".

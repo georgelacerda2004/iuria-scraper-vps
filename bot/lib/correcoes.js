@@ -44,7 +44,7 @@ export async function aplicarCorrecoes({ s = db(), correcoes = lerCorrecoes() } 
     for (const m of c.mensagens || []) {
       const { data } = await s.from('se_conversas').select('triagem').eq('id', m.conversa_id).maybeSingle();
       if (!data || data.triagem?.['correcao_' + m.chave]) continue;
-      const { error } = await s.from('se_conversas').update({ triagem: { ...(data.triagem || {}), mensagem_operador: m.texto, ['correcao_' + m.chave]: new Date().toISOString() } }).eq('id', m.conversa_id);
+      const { error } = await s.from('se_conversas').update({ triagem: { ...(data.triagem || {}), ...(m.patch || {}), mensagem_operador: m.texto, ['correcao_' + m.chave]: new Date().toISOString() } }).eq('id', m.conversa_id);
       if (error) console.error('[correcoes] mensagem', m.chave, error.message); else feitas.push(`mensagem ${m.chave} na fila`);
     }
   }

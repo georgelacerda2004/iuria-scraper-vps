@@ -1,0 +1,12 @@
+{
+  "mensagens": [
+    {
+      "chave": "claudia_docs_pendentes",
+      "conversa_id": "d093aa16-9d7f-4016-a4bc-4e190874fd66",
+      "texto": "Claudia, uma coisa importante: o seu processo já foi distribuído (número 4003090-53.2026.8.26.0319), mas na petição entraram só os cartões (Bradesco e Nubank) e o consignado do Bradesco que você mandou. Para o advogado complementar o processo e você não ter nenhum prejuízo, ainda preciso que me mande:\n\n1) o contrato ou extrato do consignado do Santander (com saldo devedor e parcela);\n2) o contrato ou extrato do consignado do Sicoob/Cooperserv;\n3) o holerite mais recente completo (todas as páginas);\n4) se tiver, a última fatura do Nubank.\n\nPode mandar foto ou PDF por aqui mesmo que eu guardo na sua pasta. Assim que chegar, o advogado faz o aditamento no processo. Qualquer dúvida sobre onde pegar, me pergunta. 😊",
+      "patch": {
+        "docs_pendentes": "os contratos ou extratos dos consignados do Santander e do Sicoob/Cooperserv (com saldo devedor e parcela), o holerite mais recente completo e, se tiver, a última fatura do Nubank"
+      }
+    }
+  ]
+}

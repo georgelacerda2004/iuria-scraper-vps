@@ -122,6 +122,18 @@ async function verificarPendencias() {
 }
 if (process.env.NODE_ENV !== 'test') setInterval(() => fecharOfertas().then(n => n && console.log(`[mercado] ${n} oferta(s) fechada(s)`)).catch(e => console.error('[mercado]', e.message)), 60_000);
 
+// Roda `fn` uma vez por dia no horário HH:MM de Brasília (checa a cada minuto; não repete no mesmo dia).
+function agendarDiario(hhmm, fn) {
+  let ultimoDia = null;
+  setInterval(() => {
+    const agora = new Date().toLocaleString('sv-SE', { timeZone: 'America/Sao_Paulo' }); // "AAAA-MM-DD HH:MM:SS"
+    const [dia, hora] = agora.split(' ');
+    if (hora.slice(0, 5) !== hhmm || ultimoDia === dia) return;
+    ultimoDia = dia;
+    fn();
+  }, 60_000);
+}
+
 // Mensagem escrita pelo operador (painel ou triagem.mensagem_operador no banco): a Paula envia como se fosse dela
 // e grava no histórico. Se o WhatsApp recusar (fora da janela de 24 h), fica registrado o erro para o painel.
 async function enviarMensagensOperador() {
@@ -268,7 +280,9 @@ if (process.env.NODE_ENV !== 'test') setInterval(() => verificarPendencias().cat
 // SDR (follow-ups a cada 10 min), pós (protocolo e andamentos a cada 15 min) e templates do WhatsApp (boot + 1x/dia).
 if (process.env.NODE_ENV !== 'test') {
   setInterval(() => rodarFollowups().then(n => n && console.log(`[followup] ${n} retomada(s) enviada(s)`)).catch(e => console.error('[followup]', e.message)), 10 * 60_000);
-  setInterval(() => rodarPos().then(r => (r.protocolos || r.andamentos) && console.log(`[pos] ${r.protocolos} protocolo(s), ${r.andamentos} andamento(s) avisados`)).catch(e => console.error('[pos]', e.message)), 15 * 60_000);
+  setInterval(() => rodarPos({ andamentos: false }).then(r => r.protocolos && console.log(`[pos] ${r.protocolos} protocolo(s) avisado(s)`)).catch(e => console.error('[pos]', e.message)), 15 * 60_000);
+  // Andamentos (inclusive liminar): uma leitura por dia, no horário do escritório (ANDAMENTOS_HORA, padrão 18:00 BRT).
+  agendarDiario(process.env.ANDAMENTOS_HORA || '18:00', () => rodarPos({ andamentos: true }).then(r => console.log(`[pos] leitura diária: ${r.andamentos} andamento(s) avisado(s)`)).catch(e => console.error('[pos]', e.message)));
   setTimeout(() => aplicarCorrecoes().catch(e => console.error('[correcoes]', e.message)), 20_000);
   // Pacote de protocolo (PDFs) para toda distribuição com petição gerada: 60 s após o boot e a cada 5 min.
   setTimeout(() => prepararPacotes().catch(e => console.error('[protocolo]', e.message)), 60_000);

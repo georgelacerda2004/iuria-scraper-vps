@@ -460,6 +460,19 @@ console.log('smoke ok (peticao + campanha)');
   const tp = pos.textoProtocolo({ nome_perfil: 'Ana Lima' }, { ...p, sistema: 'eproc' }, '314107778926', 'https://www.iuria.com.br/portal.html?token=abc');
   assert.match(tp, /portal\.html\?token=abc[\s\S]*chave \*314107778926\*[\s\S]*eproc1g/);
   assert.doesNotMatch(tp, /\(número/);
+  const cc = { nome_perfil: 'Claudia Celestino', criado_em: '2026-10-08T22:11:13Z', assinado_em: '2026-10-09T12:00:00Z', triagem: { registrado_em: '2026-10-08T22:57:49Z', proposta_aceita_em: '2026-10-08T23:06:22Z', pagamento: 'apos_liminar', documentos: { pessoal: {}, renda: {}, endereco: {} }, docs_dividas: 1, docs_pendentes: 'os contratos ou extratos dos consignados do Santander e da Cooperserv' } };
+  const lt = pos.linhaDoTempo(cc, { numero: '4003090-53.2026.8.26.0319', data_distribuicao: '2026-10-10' });
+  assert.match(lt, /08\/10\/2026: primeiro contato[\s\S]*entrada após a liminar[\s\S]*pessoal, renda, endereco; 1 extrato[\s\S]*09\/10\/2026: assinou[\s\S]*10\/10\/2026: processo protocolado \(4003090[\s\S]*PENDENTES: os contratos/);
+  assert.match(pos.textoDocsPendentes(cc, pos.docsPendentes(cc)), /Claudia, uma coisa importante[\s\S]*Santander e da Cooperserv/);
+  assert.equal(pos.docsPendentes({ triagem: { docs_pendentes: 'x', docs_pendentes_resolvido_em: '2026-10-11' } }), '');
+  // rodar sem andamentos: avisa protocolo + pendência e não lê andamentos
+  {
+    const enviados = []; let leu = false;
+    const deps = { enviar: async ({ texto }) => { enviados.push(texto); return { via: 'text', texto, out: {} }; }, chave: async () => 'K1', portal: async () => 'https://p', andamentos: async () => { leu = true; return []; } };
+    const antes = process.env.NODE_ENV; // db() é nulo em teste: rodar devolve zeros sem quebrar
+    const r = await pos.rodar({ deps, andamentos: false });
+    assert.deepEqual(r, { protocolos: 0, andamentos: 0 }); assert.equal(leu, false); process.env.NODE_ENV = antes;
+  }
   assert.match(pos.textoAndamento({ nome_perfil: 'Ana' }, p, { data: '2026-10-20', tipo: 'Decisão', descricao: 'Defiro a tutela' }), /Decisão: Defiro a tutela/);
   let ctx = null, fase = null;
   const f = await proximoPasso({ etapa: 'cliente', processo_id: 'p1', nome_perfil: 'Ana' }, { texto: 'como está meu processo?' }, { resumoProcesso: async () => 'Número do processo: 123', ia: async (a) => { ctx = a.contexto; fase = a.fase; return { texto: 'Está assim...' }; } });

@@ -106,6 +106,7 @@ export async function proximoPasso(conversa, ev, opts = {}) {
     // Pós-contratação: a Paula responde com os dados do processo (número, status, últimos andamentos).
     let contexto = '';
     try { contexto = await (opts.resumoProcesso || resumoProcesso)(conversa.processo_id); } catch (e) { console.warn('[fluxo] resumoProcesso:', e.message); }
+    try { const { linhaDoTempo } = await import('./pos.js'); contexto = `${contexto}\n\n${linhaDoTempo(conversa, null)}`; } catch (e) { console.warn('[fluxo] linhaDoTempo:', e.message); }
     let r;
     try { r = await ia({ historico, textoAtual: texto, fase: 'pos', contexto }); }
     catch (e) { console.error('[fluxo] IA (pos) falhou:', e.message); return { respostas: ['Seu caso está com o advogado. Ele responde por aqui em horário comercial. Se for urgente, escreva "falar com advogado".'], patch: {} }; }
