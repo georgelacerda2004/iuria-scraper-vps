@@ -2,7 +2,7 @@
 import { db, gravarMensagem, atualizarConversa } from './db.js';
 import { enviar } from './whatsapp.js';
 import { disponivel } from './templates.js';
-import { linkConsulta, andamentosDesde, chaveConsulta, buscarCliente } from './iuria.js';
+import { linkConsulta, andamentosDesde, chaveConsulta, buscarCliente, linkPortal } from './iuria.js';
 import { classificarAndamento, textoAndamentoExplicado, tratarLiminarDeferida, textoEntradaAposLiminar } from './andamentos.js';
 
 const NOME_ROBO = () => process.env.NOME_ROBO || 'Paula';
@@ -15,10 +15,11 @@ async function mandar(c, { texto, template, params }, deps) {
   return true;
 }
 
-export function textoProtocolo(c, p, chave) {
+export function textoProtocolo(c, p, chave, portal) {
   const nome = primeiro(c.nome_perfil);
   const consulta = chave ? `Para consultar no site do tribunal use o número do processo e a chave *${chave}*: ${linkConsulta(p, chave).split(' (')[0]}` : `Você pode acompanhar pelo site do tribunal: ${linkConsulta(p)}`;
-  return `${nome ? nome + ', b' : 'B'}oa notícia: o advogado protocolou o seu processo. 🎉\n\nNúmero: *${p.numero}*\n${[p.tribunal, p.vara, p.comarca].filter(Boolean).join(' · ')}\n\n${consulta}\n\nEu também te aviso por aqui a cada andamento importante e explico o que cada um significa. Qualquer dúvida, é só me chamar. Aqui é a ${NOME_ROBO()}.`;
+  const acomp = portal ? `Acompanhe o andamento neste link (é só abrir, sem senha): ${portal}\n\n${consulta}` : consulta;
+  return `${nome ? nome + ', b' : 'B'}oa notícia: o advogado protocolou o seu processo. 🎉\n\nNúmero: *${p.numero}*\n${[p.tribunal, p.vara, p.comarca].filter(Boolean).join(' · ')}\n\n${acomp}\n\nEu também te aviso por aqui a cada andamento importante e explico o que cada um significa. Qualquer dúvida, é só me chamar. Aqui é a ${NOME_ROBO()}.`;
 }
 
 export function textoAndamento(c, p, a) {
@@ -39,8 +40,9 @@ export async function rodar({ deps = {} } = {}) {
     if (!p?.numero) continue;
     try {
       const chave = await (deps.chave || chaveConsulta)(c.processo_id);
+      const portal = await (deps.portal || linkPortal)(c.cliente_id);
       if (!c.protocolo_avisado_em) {
-        const ok = await mandar(c, { texto: textoProtocolo(c, p, chave), template: 'se_processo_protocolado', params: [primeiro(c.nome_perfil) || 'tudo bem', p.numero, linkConsulta(p, chave).split(' (')[0]] }, deps);
+        const ok = await mandar(c, { texto: textoProtocolo(c, p, chave, portal), template: 'se_processo_protocolado', params: [primeiro(c.nome_perfil) || 'tudo bem', p.numero, portal || linkConsulta(p, chave).split(' (')[0]] }, deps);
         if (ok) { const em = new Date().toISOString(); await atualizarConversa(c.id, { protocolo_avisado_em: em, andamento_avisado_em: em }); protocolos++; }
         continue; // andamentos a partir do próximo ciclo
       }
@@ -48,7 +50,7 @@ export async function rodar({ deps = {} } = {}) {
       for (const a of novos) {
         // A Paula lê a movimentação e explica; liminar deferida dispara a entrada (se for "após a liminar") e o êxito.
         const classe = await classificarAndamento(a, { contexto: `${c.triagem?.resumo || ''}`.slice(0, 800), deps });
-        const link = linkConsulta(p, chave).split(' (')[0];
+        const link = portal || linkConsulta(p, chave).split(' (')[0];
         const texto = textoAndamentoExplicado({ nome: c.nome_perfil, processo: p, andamento: a, classe, link });
         const ok = await mandar(c, { texto, template: 'se_andamento', params: [primeiro(c.nome_perfil) || 'tudo bem', p.numero, `${a.tipo || 'andamento'}: ${(classe.resumo_cliente || a.descricao || '').slice(0, 150)}`] }, deps);
         if (!ok) break;

@@ -190,6 +190,23 @@ export function linkConsulta(p, chave) {
   return 'https://www.cnj.jus.br/consulta-processual-unificada/';
 }
 
+// Portal do Cliente do IURIA (página pública só-leitura, por token). Cria o acesso (nível 1: andamentos e
+// próximos compromissos) na primeira vez e devolve a URL que a Paula manda para a cliente.
+export const PORTAL_URL = () => process.env.IURIA_PORTAL_URL || 'https://www.iuria.com.br/portal.html';
+export async function linkPortal(clienteId) {
+  const s = db();
+  if (!s || !clienteId) return null;
+  const { data: ex } = await s.from('cliente_portal').select('token,ativo').eq('cliente_id', clienteId).order('criado_em', { ascending: false }).limit(1).maybeSingle();
+  let token = ex?.ativo ? ex.token : null;
+  if (!token) {
+    const { data: cli } = await s.from('clientes').select('criado_por').eq('id', clienteId).maybeSingle();
+    const { data: novo, error } = await s.from('cliente_portal').insert({ cliente_id: clienteId, ativo: true, nivel_acesso: 1, criado_por: cli?.criado_por || null }).select('token').single();
+    if (error) { console.warn('[portal] não criei o acesso:', error.message); return null; }
+    token = novo?.token;
+  }
+  return token ? `${PORTAL_URL()}?token=${token}` : null;
+}
+
 // Chave de consulta pública gravada no resultado do protocolo (distribuição).
 export async function chaveConsulta(processoId) {
   const s = db();
