@@ -91,8 +91,8 @@ export async function criarProcesso({ cliente, escritorioId, triagem }) {
   const { data, error } = await s.from('processos').insert({
     cliente_id: cliente.id,
     objeto_acao: 'Repactuação de dívidas — Lei 14.181/2021 (art. 104-A do CDC)',
-    // Valores dentro dos CHECKs da tabela processos: status 'A distribuir' (ainda não protocolado), grau '1g', sistema 'esaj'.
-    tipo_processo: 'Judicial', status_processo: 'A distribuir', grau: '1g', sistema: (process.env.SISTEMA_PADRAO || 'esaj').toLowerCase(), area_atuacao: 'Cível', posicao_parte: 'Autor',
+    // Valores dentro dos CHECKs da tabela processos: status 'A distribuir' (ainda não protocolado), grau '1g', sistema 'eproc' (TJSP migrou do e-SAJ).
+    tipo_processo: 'Judicial', status_processo: 'A distribuir', grau: '1g', sistema: (process.env.SISTEMA_PADRAO || 'eproc').toLowerCase(), area_atuacao: 'Cível', posicao_parte: 'Autor',
     natureza: 'Superendividamento', tribunal: process.env.TRIBUNAL_PADRAO || 'TJSP', uf: cliente.uf || 'SP', comarca: cliente.cidade || null,
     parte_adversa_texto: (triagem?.calculo ? [] : []).concat(((triagem?.credores) || []).map(c => c.credor)).join(', ') || 'Credores (ver declaração)',
     responsavel: process.env.RESPONSAVEL_NOME || process.env.ADVOGADO_NOME || null, advogado_nome: process.env.ADVOGADO_NOME || null, advogado_oab: process.env.ADVOGADO_OAB || null,
@@ -179,9 +179,23 @@ export async function resumoProcesso(processoId) {
   return l.join('\n');
 }
 
-export function linkConsulta(p) {
+export function linkConsulta(p, chave) {
   if (process.env.LINK_CONSULTA_PROCESSO) return process.env.LINK_CONSULTA_PROCESSO;
-  return (p?.tribunal || 'TJSP').toUpperCase().includes('TJSP') ? 'https://esaj.tjsp.jus.br/cpopg/open.do' : 'https://www.cnj.jus.br/consulta-processual-unificada/';
+  const tj = (p?.tribunal || 'TJSP').toUpperCase();
+  if (tj.includes('TJSP')) {
+    // Processos do eproc (TJSP desde 2026) têm consulta pública própria, com número + chave.
+    if ((p?.sistema || '').toLowerCase() === 'eproc' || chave) return 'https://eproc1g.tjsp.jus.br/eproc/externo_controlador.php?acao=processo_consulta_publica' + (chave ? ` (número ${p?.numero || ''} e chave ${chave})` : '');
+    return 'https://esaj.tjsp.jus.br/cpopg/open.do';
+  }
+  return 'https://www.cnj.jus.br/consulta-processual-unificada/';
+}
+
+// Chave de consulta pública gravada no resultado do protocolo (distribuição).
+export async function chaveConsulta(processoId) {
+  const s = db();
+  if (!s || !processoId) return null;
+  const { data } = await s.from('distribuicoes').select('resultado').eq('processo_id', processoId).eq('status', 'protocolada').order('created_at', { ascending: false }).limit(1).maybeSingle();
+  return data?.resultado?.chave || null;
 }
 
 // Andamentos criados depois de `desde` (ISO), mais antigos primeiro.

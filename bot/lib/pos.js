@@ -2,7 +2,8 @@
 import { db, gravarMensagem, atualizarConversa } from './db.js';
 import { enviar } from './whatsapp.js';
 import { disponivel } from './templates.js';
-import { linkConsulta, andamentosDesde } from './iuria.js';
+import { linkConsulta, andamentosDesde, chaveConsulta, buscarCliente } from './iuria.js';
+import { classificarAndamento, textoAndamentoExplicado, tratarLiminarDeferida, textoEntradaAposLiminar } from './andamentos.js';
 
 const NOME_ROBO = () => process.env.NOME_ROBO || 'Paula';
 const primeiro = (n) => (n || '').split(' ')[0];
@@ -14,9 +15,10 @@ async function mandar(c, { texto, template, params }, deps) {
   return true;
 }
 
-export function textoProtocolo(c, p) {
+export function textoProtocolo(c, p, chave) {
   const nome = primeiro(c.nome_perfil);
-  return `${nome ? nome + ', b' : 'B'}oa notícia: o advogado protocolou o seu processo. 🎉\n\nNúmero: *${p.numero}*\n${[p.tribunal, p.vara, p.comarca].filter(Boolean).join(' · ')}\n\nVocê pode acompanhar pelo site do tribunal: ${linkConsulta(p)}\n\nEu também te aviso por aqui a cada andamento importante. Qualquer dúvida, é só me chamar. Aqui é a ${NOME_ROBO()}.`;
+  const consulta = chave ? `Para consultar no site do tribunal use o número do processo e a chave *${chave}*: ${linkConsulta(p, chave).split(' (')[0]}` : `Você pode acompanhar pelo site do tribunal: ${linkConsulta(p)}`;
+  return `${nome ? nome + ', b' : 'B'}oa notícia: o advogado protocolou o seu processo. 🎉\n\nNúmero: *${p.numero}*\n${[p.tribunal, p.vara, p.comarca].filter(Boolean).join(' · ')}\n\n${consulta}\n\nEu também te aviso por aqui a cada andamento importante e explico o que cada um significa. Qualquer dúvida, é só me chamar. Aqui é a ${NOME_ROBO()}.`;
 }
 
 export function textoAndamento(c, p, a) {
@@ -36,16 +38,27 @@ export async function rodar({ deps = {} } = {}) {
     const p = porId[c.processo_id];
     if (!p?.numero) continue;
     try {
+      const chave = await (deps.chave || chaveConsulta)(c.processo_id);
       if (!c.protocolo_avisado_em) {
-        const ok = await mandar(c, { texto: textoProtocolo(c, p), template: 'se_processo_protocolado', params: [primeiro(c.nome_perfil) || 'tudo bem', p.numero, linkConsulta(p)] }, deps);
+        const ok = await mandar(c, { texto: textoProtocolo(c, p, chave), template: 'se_processo_protocolado', params: [primeiro(c.nome_perfil) || 'tudo bem', p.numero, linkConsulta(p, chave).split(' (')[0]] }, deps);
         if (ok) { const em = new Date().toISOString(); await atualizarConversa(c.id, { protocolo_avisado_em: em, andamento_avisado_em: em }); protocolos++; }
         continue; // andamentos a partir do próximo ciclo
       }
       const novos = await (deps.andamentos || andamentosDesde)(c.processo_id, c.andamento_avisado_em);
       for (const a of novos) {
-        const ok = await mandar(c, { texto: textoAndamento(c, p, a), template: 'se_andamento', params: [primeiro(c.nome_perfil) || 'tudo bem', p.numero, `${a.tipo || 'andamento'}: ${(a.descricao || '').slice(0, 150)}`] }, deps);
+        // A Paula lê a movimentação e explica; liminar deferida dispara a entrada (se for "após a liminar") e o êxito.
+        const classe = await classificarAndamento(a, { contexto: `${c.triagem?.resumo || ''}`.slice(0, 800), deps });
+        const link = linkConsulta(p, chave).split(' (')[0];
+        const texto = textoAndamentoExplicado({ nome: c.nome_perfil, processo: p, andamento: a, classe, link });
+        const ok = await mandar(c, { texto, template: 'se_andamento', params: [primeiro(c.nome_perfil) || 'tudo bem', p.numero, `${a.tipo || 'andamento'}: ${(classe.resumo_cliente || a.descricao || '').slice(0, 150)}`] }, deps);
         if (!ok) break;
         await atualizarConversa(c.id, { andamento_avisado_em: a.created_at }); andamentos++;
+        if (classe.categoria === 'liminar_deferida') {
+          const cliente = await (deps.cliente || buscarCliente)(c.cliente_id);
+          const r = await (deps.tratarLiminar || tratarLiminarDeferida)({ conversa: c, cliente, processo: p, andamento: a, deps });
+          if (r?.patch?.cobranca?.url) await mandar(c, { texto: textoEntradaAposLiminar({ nome: c.nome_perfil, cobranca: r.patch.cobranca }), template: 'se_pendencia', params: [primeiro(c.nome_perfil) || 'tudo bem', 'entrada após a liminar', r.patch.cobranca.url] }, deps);
+          c.triagem = { ...(c.triagem || {}), ...(r?.patch || {}) };
+        }
       }
     } catch (e) { console.error('[pos]', c.wa_id, e.message); }
   }

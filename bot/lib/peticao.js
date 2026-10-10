@@ -139,7 +139,7 @@ export function montarDistribuicao({ cliente, processoId, entrevistaId, triagem,
   });
   return {
     criado_por: criadoPor, escritorio_id: escritorioId, cliente_id: cliente.id, processo_id: processoId, entrevista_id: entrevistaId,
-    tribunal: process.env.TRIBUNAL_PADRAO || 'TJSP', sistema: process.env.SISTEMA_PADRAO || 'eproc', grau: '1', area_direito: 'Consumidor', competencia: 'Cível',
+    tribunal: process.env.TRIBUNAL_PADRAO || 'TJSP', sistema: (process.env.SISTEMA_PADRAO || 'eproc').toLowerCase(), grau: '1', area_direito: 'Consumidor', competencia: 'Cível',
     jurisdicao: cliente.cidade ? `Foro de ${cliente.cidade}` : null, comarca: null,
     classe_nome: 'Procedimento de Repactuação de Dívidas (Superendividamento)', assuntos: [{ nome: 'Superendividamento' }],
     partes: { ativo, passivo }, valor_causa: lerValor(valorCausa) || c.saldo_total_considerado || null, justica_gratuita: true, segredo_justica: false, prioridade: false, tutela_liminar: true,

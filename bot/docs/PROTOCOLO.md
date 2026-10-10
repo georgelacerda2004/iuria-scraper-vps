@@ -1,6 +1,15 @@
-# Fila de protocolo — contrato para o robô do PC (semana 2)
+# Fila de protocolo — contrato para o robô do PC (eproc TJSP)
 
-Fluxo: `rascunho` (petição gerada) → `pronta` (pacote de PDFs montado pelo servidor) → `aprovada` (toque do advogado no painel) → `em_protocolo` (robô pegou) → `protocolada` | `erro`.
+Fluxo: `rascunho` (petição gerada) → `pronta` (pacote de PDFs montado pelo servidor) → `aprovada` (toque do advogado no painel, ou automático com `PROTOCOLO_AUTO=on`) → `em_protocolo` (robô pegou) → `protocolada` | `erro`.
+
+Com `PROTOCOLO_AUTO=on` (ligado em 10/10/2026 por ordem do George) o item já nasce `aprovada` assim que o pacote fica pronto: a Paula fecha o caso e o robô protocola na rodada seguinte, sem toque no painel. O botão "Cancelar aprovação" no painel continua valendo para segurar um caso.
+
+## 0. O que a fila garante desde 10/10 (pedidos do relatório do Hermes)
+- `partes.ativo[]` traz `logradouro`, `numero`, `complemento`, `bairro`, `cidade`, `uf`, `cep` e `sexo` (`sexo_inferido: true` quando deduzido pelo nome: o engine deve registrar no log).
+- `jurisdicao` na Capital vem com o **Foro Regional pelo CEP** (consulta à Competência Territorial do TJSP; cai em "São Paulo - Foro Central Cível" se a consulta falhar). Fora da Capital: "Foro de <Cidade>".
+- `opcoes.juizo_digital: true` sempre presente.
+- `sistema` é `eproc`.
+- Réus sem CNPJ vêm com `pendente: true` (o engine deve parar com erro explícito, nunca inventar).
 
 O robô roda no PC do escritório com o certificado A3 do advogado que assina a peça plugado. Ele só age sobre itens `aprovada`. Nunca tenta duas vezes sozinho: em erro, para, manda o print e espera nova aprovação.
 
@@ -31,10 +40,12 @@ Ordem de juntada no e-SAJ: `01` é a petição; os demais são documentos, na or
 ## 3. Devolver o resultado
 `POST /fila/:distribuicao_id/resultado`
 
-Sucesso:
+Sucesso (o engine do Hermes devolve isto ao final de `--finalizar`):
 ```json
-{ "ok": true, "numero_processo": "1001234-56.2026.8.26.0319", "recibo_base64": "<PDF do recibo do e-SAJ>", "recibo_nome": "recibo.pdf", "detalhes": { "foro": "...", "vara": "..." } }
+{ "ok": true, "numero_processo": "4198609-41.2026.8.26.0100", "recibo_base64": "<PDF do recibo, opcional>", "recibo_nome": "recibo.pdf",
+  "detalhes": { "chave": "314107778926", "juizo": "45ª Vara Cível - Foro Central Cível", "sistema": "eproc", "partes": "..." } }
 ```
+`detalhes.chave` vira a chave de consulta pública que a Paula manda à cliente; `detalhes.juizo` preenche vara e comarca do processo no IURIA.
 Erro (qualquer tela inesperada, CAPTCHA, PIN recusado, campo que não achou):
 ```json
 { "ok": false, "erro": "texto curto do que aconteceu", "tela_base64": "<PNG da tela>", "detalhes": { "passo": "anexos" } }

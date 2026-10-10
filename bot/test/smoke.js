@@ -305,6 +305,42 @@ assert.equal(pp2.distribuicaoId, 'dist-10'); assert.equal(gerouDeNovo, false); a
   console.log('smoke ok (pacote/protocolo)');
 }
 
+// --- eproc: foro pelo CEP, polo ativo completo, andamentos explicados, liminar deferida ---
+{
+  const { extrairForo, jurisdicaoPara } = await import('../lib/foro.js');
+  assert.equal(extrairForo('<tr><td>Competência Cível</td><td>Foro Regional XV - Butantã</td></tr>').foro, 'Foro Regional XV - Butantã');
+  assert.equal(extrairForo(JSON.stringify([{ Competencia: 'Cível', Foro: 'Foro Regional II - Santo Amaro' }])).foro, 'Foro Regional II - Santo Amaro');
+  assert.equal(extrairForo('nada aqui'), null);
+  assert.equal(await jurisdicaoPara({ cidade: 'Lençóis Paulista', uf: 'SP', cep: '18682-722' }), 'Foro de Lençóis Paulista');
+  assert.equal(await jurisdicaoPara({ cidade: 'São Paulo', uf: 'SP', cep: '05569-010' }, { foroPorCep: async () => ({ foro: 'Foro Regional XV - Butantã' }) }), 'São Paulo - Foro Regional XV - Butantã');
+  assert.equal(await jurisdicaoPara({ cidade: 'SAO PAULO', uf: 'SP', cep: '01000-000' }, { foroPorCep: async () => null }), 'São Paulo - Foro Central Cível');
+  const { sexoDe, completarAtivo, montarItemFila } = await import('../lib/protocolo.js');
+  assert.deepEqual(sexoDe({ nome: 'SILVANA DE BRITO SANTOS' }), { sexo: 'F', inferido: true });
+  assert.deepEqual(sexoDe({ nome: 'Andre Silva' }), { sexo: 'M', inferido: true });
+  assert.deepEqual(sexoDe({ nome: 'João', sexo: 'M' }), { sexo: 'M', inferido: false });
+  const [a] = await completarAtivo([{ tipo_pessoa: 'PF', nome: 'CLAUDIA CELESTINO', cpf: '1', cep: '18682-722', cidade: 'Lençóis Paulista', uf: 'SP' }], { endereco: 'Praça Antônia Foganholi Paccola, nº 463', bairro: 'Jardim Maria Luiza II', cidade: 'Lençóis Paulista', uf: 'SP', cep: '18682-722' });
+  assert.equal(a.logradouro, 'Praça Antônia Foganholi Paccola'); assert.equal(a.numero, '463'); assert.equal(a.bairro, 'Jardim Maria Luiza II'); assert.equal(a.sexo, 'F');
+  const item = await montarItemFila({ id: 'd1', status: 'aprovada', sistema: 'eproc', partes: { ativo: [{ nome: 'SILVANA', cep: '05569-010', cidade: 'São Paulo', uf: 'SP' }], passivo: [] }, opcoes_adicionais: { intervencao_mp: false }, progresso: { pacote: [] } }, { cliente: { nome: 'SILVANA', endereco: 'Rua Frei Claude d Alberville, nº 128', bairro: 'Jardim João XXIII', cidade: 'São Paulo', uf: 'SP', cep: '05569-010' }, assinarUrl: async p => p, foro: async () => ({ foro: 'Foro Regional XV - Butantã' }) });
+  assert.equal(item.jurisdicao, 'São Paulo - Foro Regional XV - Butantã'); assert.equal(item.opcoes.juizo_digital, true); assert.equal(item.partes.ativo[0].numero, '128'); assert.equal(item.partes.ativo[0].sexo, 'F');
+  const { classificarRapido, textoAndamentoExplicado, classificarAndamento, tratarLiminarDeferida } = await import('../lib/andamentos.js');
+  assert.equal(classificarRapido({ descricao: 'Decisão: defiro a tutela de urgência para limitar os descontos a 30%' }), 'liminar_deferida');
+  assert.equal(classificarRapido({ descricao: 'Indefiro a liminar por ora' }), 'liminar_indeferida');
+  assert.equal(classificarRapido({ tipo: 'Audiência designada', descricao: 'Audiência de conciliação em 20/11/2026' }), 'audiencia');
+  assert.equal(classificarRapido({ descricao: 'Juntada de certidão' }), 'juntada');
+  const cl = await classificarAndamento({ descricao: 'Conclusos para despacho' });
+  assert.equal(cl.categoria, 'despacho');
+  const txt = textoAndamentoExplicado({ nome: 'Silvana Brito', processo: { numero: '4198609-41.2026.8.26.0100' }, andamento: { data: '10/10/2026', descricao: 'Defiro a tutela' }, classe: { categoria: 'liminar_deferida', resumo_cliente: 'O juiz mandou limitar os descontos.', precisa_acao_cliente: '' }, link: 'https://x' });
+  assert.match(txt, /Liminar concedida/); assert.match(txt, /limitar os descontos/); assert.match(txt, /https:\/\/x/);
+  const { linkConsulta } = await import('../lib/iuria.js');
+  assert.match(linkConsulta({ tribunal: 'TJSP', sistema: 'eproc', numero: '123' }, '314107778926'), /eproc1g\.tjsp\.jus\.br.*chave 314107778926/);
+  assert.match(linkConsulta({ tribunal: 'TJSP' }), /esaj/);
+  // liminar deferida: cobra a entrada (após liminar) com o Asaas injetado e registra no histórico da conversa
+  let cobrada = null;
+  const r = await tratarLiminarDeferida({ conversa: { id: 'c1', wa_id: '5511999', triagem: { pagamento: 'apos_liminar', calculo: triagemFake.calculo } }, cliente: { id: 'cl1', nome: 'Fulana', cpf: '1' }, processo: { id: 'p1', numero: '123' }, andamento: { id: 'a1', descricao: 'Defiro' }, deps: { garantirCliente: async () => 'cus_1', criarCobranca: async (x) => { cobrada = x; return { id: 'pay_1', url: 'https://asaas/x', status: 'PENDING' }; } } });
+  assert.equal(cobrada.valor, 500); assert.equal(r.patch.cobranca.url, 'https://asaas/x'); assert.ok(r.patch.liminar_deferida_em);
+  console.log('smoke ok (eproc/andamentos/liminar)');
+}
+
 // --- campanha: regras de decisão e relatório ---
 const { decidir, relatorio: relCamp } = await import('../lib/campanha.js');
 const R = { orcamentoDiario: 100, gastoMinimoParaJulgar: 60, tetoCustoConversa: 25, tetoCustoLeadQualificado: 120, janelaDias: 7 };
