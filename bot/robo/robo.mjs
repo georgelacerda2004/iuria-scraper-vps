@@ -117,8 +117,9 @@ async function protocolar(item) {
 }
 
 async function ciclo() {
-  const { itens } = await api('/fila');
-  const item = itens.find(i => i.status === 'aprovada');
+  // No ensaio vale um item só 'pronta' (ainda sem aprovação): nada é protocolado nem enviado ao painel.
+  const { itens } = await api(ENSAIO ? '/fila?incluir=pronta' : '/fila');
+  const item = itens.find(i => i.status === 'aprovada') || (ENSAIO ? itens.find(i => i.status === 'pronta') : null);
   if (!item) { log('fila vazia'); return false; }
   log(`item ${item.distribuicao_id.slice(0, 8)} — ${item.cliente?.nome} — ${item.classe} — R$ ${item.valor_causa}`);
   if (!ENSAIO) await api(`/fila/${item.distribuicao_id}/pegar`, { method: 'POST', body: JSON.stringify({ robo: CFG.robo }) });
