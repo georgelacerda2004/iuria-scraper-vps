@@ -71,6 +71,8 @@ app.post('/webhook', (req, res) => {
   res.sendStatus(200); // responde antes de processar: a Meta exige resposta rápida
   const eventos = extrairEventos(req.body);
   console.log(`[webhook] ${eventos.filter(e => e.kind === 'message').length} mensagem(ns), ${eventos.filter(e => e.kind === 'status').length} status`);
+  // Entregas que falham dizem o motivo (número restrito, janela fechada, método de pagamento): fica no log para diagnóstico.
+  for (const st of eventos.filter(e => e.kind === 'status' && (e.status === 'failed' || e.erros?.length))) console.warn(`[webhook] entrega ${st.status} para ${st.waId}: ${st.erros.map(e => `${e.code} ${e.title}${e.detail ? ' (' + e.detail + ')' : ''}`).join('; ') || 'sem detalhe'}`);
   for (const ev of eventos) {
     if (ev.kind !== 'message' || jaVisto(ev.messageId)) continue;
     tratarMensagem(ev).catch(err => console.error('[bot] erro ao tratar mensagem:', err.message));

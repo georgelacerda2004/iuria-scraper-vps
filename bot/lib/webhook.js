@@ -48,7 +48,7 @@ export function extrairEventos(body) {
         eventos.push(ev);
       }
       for (const st of v.statuses ?? []) {
-        eventos.push({ kind: 'status', messageId: st.id, status: st.status, waId: st.recipient_id, timestamp: Number(st.timestamp) * 1000 });
+        eventos.push({ kind: 'status', messageId: st.id, status: st.status, waId: st.recipient_id, timestamp: Number(st.timestamp) * 1000, erros: (st.errors || []).map(e => ({ code: e.code, title: e.title, detail: e.error_data?.details || e.message || '' })) });
       }
     }
   }
