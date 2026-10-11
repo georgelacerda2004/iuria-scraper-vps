@@ -41,6 +41,7 @@ export const MSG = {
   extraGuardado: 'Recebi, guardei na sua pasta no escritório. O advogado já tem acesso.',
   processando: 'Recebi os documentos, obrigado! Estou preparando o seu cadastro e os documentos para assinatura. Leva um minutinho.',
   pedirCpf: 'Recebi os documentos, obrigado! Só não consegui ler o seu *CPF* na foto. Me manda o número do CPF (só os dígitos) para eu finalizar o cadastro.',
+  novoLinkPagamento: (nome, valor, url) => `${(nome || '').split(' ')[0] ? (nome || '').split(' ')[0] + ', o' : 'O'} link de pagamento da entrada (R$ ${valor.toFixed(2).replace('.', ',')}) foi atualizado. Use este, por Pix, boleto ou cartão:\n${url}\n\nO link anterior não vale mais. Depois de pagar, é só assinar os documentos que já mandei. Qualquer dúvida, me chama.`,
   linksEnvio: ({ valor, urlPagamento, docs, modo = 'agora' }) => urlPagamento
     ? `Pronto! Para seguir com o seu caso, são dois passos:\n\n` +
     `1) *Entrada dos honorários* (R$ ${valor.toFixed(2).replace('.', ',')}), por Pix, boleto ou cartão:\n${urlPagamento}\n\n` +
@@ -209,6 +210,18 @@ export async function verificarConclusao(conversa, deps = {}) {
   const patch = {};
   const diferido = pagamentoDiferido(triagem);
   let pago = !!conversa.pago_em;
+  // Cobrança emitida no sandbox (link que não aceita pagamento real): quando o Asaas entra em produção, refaz a
+  // cobrança na conta real e manda o link novo para a pessoa. Uma vez só por conversa.
+  if (!pago && !diferido && /sandbox\.asaas\.com/.test(triagem.cobranca?.url || '') && (deps.emProducao || asaas.emProducao)() && !triagem.cobranca_refeita_em) {
+    try {
+      const c0 = cliente || await (deps.buscarCliente || iuria.buscarCliente)(conversa.cliente_id) || { nome: conversa.nome_perfil };
+      const customerId = await (deps.asaasCliente || asaas.garantirCliente)({ nome: c0.nome, cpf: c0.cpf, celular: conversa.wa_id, email: c0.email1 });
+      const referencia = `SE|${conversa.id}`;
+      const nova = await (deps.asaasCobranca || asaas.criarCobranca)({ customerId, valor: ENTRADA(), referencia, descricao: 'Entrada de honorários — análise e repactuação de dívidas (Lei 14.181/2021)' });
+      const t2 = { ...triagem, cobranca: { id: nova.id, url: nova.url, referencia }, cobranca_refeita_em: new Date().toISOString(), cobranca_sandbox: triagem.cobranca };
+      return { respostas: [MSG.novoLinkPagamento(conversa.nome_perfil, ENTRADA(), nova.url)], patch: { ...patch, asaas_payment_id: nova.id, triagem: t2 } };
+    } catch (e) { console.warn('[captacao] não refiz a cobrança do sandbox:', conversa.wa_id, e.message); }
+  }
   if (!pago && !diferido) {
     const r = await consultarPagamento(triagem.cobranca?.referencia || `SE|${conversa.id}`);
     if (r.pago) { pago = true; patch.pago_em = new Date().toISOString(); }

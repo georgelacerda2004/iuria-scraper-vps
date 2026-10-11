@@ -465,6 +465,21 @@ console.log('smoke ok (peticao + campanha)');
   console.log('smoke ok (asaas ambiente)');
 }
 
+// --- captação: cobrança do sandbox refeita quando entra em produção ---
+{
+  const { verificarConclusao } = await import('../lib/captacao.js');
+  const conv = { id: 'c1', wa_id: '5511', nome_perfil: 'Fátima Lima', cliente_id: 'k1', triagem: { cobranca: { id: 'old', url: 'https://sandbox.asaas.com/i/abc', referencia: 'SE|c1' }, assinaturas: [{ autentiqueId: 'a1' }] } };
+  const deps = { emProducao: () => true, buscarCliente: async () => ({ nome: 'FATIMA LIMA', cpf: '1', email1: null }), asaasCliente: async () => 'cus_1', asaasCobranca: async () => ({ id: 'pay_new', url: 'https://www.asaas.com/i/novo', status: 'PENDING' }), consultarPagamento: async () => ({ pago: false }), statusAss: async () => [{ status: 'pendente' }] };
+  const r = await verificarConclusao(conv, deps);
+  assert.match(r.respostas[0], /Fátima, o link de pagamento[\s\S]*asaas\.com\/i\/novo/);
+  assert.equal(r.patch.triagem.cobranca.url, 'https://www.asaas.com/i/novo'); assert.ok(r.patch.triagem.cobranca_refeita_em); assert.equal(r.patch.asaas_payment_id, 'pay_new');
+  const r2 = await verificarConclusao({ ...conv, triagem: r.patch.triagem }, deps);
+  assert.equal(r2, null); // não refaz duas vezes
+  const r3 = await verificarConclusao(conv, { ...deps, emProducao: () => false });
+  assert.equal(r3, null); // em sandbox não mexe
+  console.log('smoke ok (cobrança sandbox refeita)');
+}
+
 // --- pós: protocolo e andamento; fluxo cliente usa a IA com contexto ---
 {
   const pos = await import('../lib/pos.js');
