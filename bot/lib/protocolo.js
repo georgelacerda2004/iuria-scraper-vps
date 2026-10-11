@@ -94,7 +94,7 @@ export async function montarItemFila(d, { s = db(), cliente = null, assinarUrl, 
     distribuicao_id: d.id, status: d.status, tribunal: d.tribunal, sistema: d.sistema, grau: d.grau,
     classe: d.classe_nome, classe_codigo: d.classe_codigo, assuntos: d.assuntos, competencia: d.competencia, area: d.area_direito,
     jurisdicao, comarca: d.comarca, valor_causa: d.valor_causa, justica_gratuita: d.justica_gratuita, tutela_liminar: d.tutela_liminar,
-    prioridade: d.prioridade, segredo_justica: d.segredo_justica, opcoes: { juizo_digital: true, ...(d.opcoes_adicionais || {}) }, partes: { ...(d.partes || {}), ativo },
+    prioridade: d.prioridade, segredo_justica: d.segredo_justica, opcoes: { juizo_digital: true, tutela_liminar: !!d.tutela_liminar, justica_gratuita: !!d.justica_gratuita, prioridade: !!d.prioridade, segredo_justica: !!d.segredo_justica, ...(d.opcoes_adicionais || {}) }, partes: { ...(d.partes || {}), ativo },
     cliente: cliente ? { nome: cliente.nome, cpf: cliente.cpf, cidade: cliente.cidade, uf: cliente.uf } : null,
     arquivos, aprovado_em: d.progresso?.aprovado_em || null, aprovado_por: d.progresso?.aprovado_por || null,
   };
