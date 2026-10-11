@@ -6,7 +6,7 @@ import { sendText, markRead } from './lib/whatsapp.js';
 import { upsertConversa, gravarMensagem, atualizarConversa, carregarHistorico } from './lib/db.js';
 import { proximoPasso } from './lib/fluxo.js';
 import { verificarConclusao, concluirCadastro, reemitirDocumentos, cpfValido, pedidoPendente, MSG as CAP } from './lib/captacao.js';
-import { EVENTOS_PAGO, descreverAmbiente as ambienteAsaas } from './lib/asaas.js';
+import { EVENTOS_PAGO, descreverAmbiente as ambienteAsaas, testarChave as testarChaveAsaas } from './lib/asaas.js';
 import { db } from './lib/db.js';
 import { ciclo as cicloCampanha } from './lib/campanha.js';
 import { avisarOperador, buscarCliente, criarEntrevista } from './lib/iuria.js';
@@ -27,6 +27,11 @@ for (const [k, v] of Object.entries(process.env)) if (v === 'PREENCHER') delete 
 const faltando = ['WHATSAPP_TOKEN', 'PHONE_NUMBER_ID', 'META_APP_SECRET', 'SUPABASE_SERVICE_ROLE_KEY', 'ANTHROPIC_API_KEY', 'ASAAS_API_KEY'].filter(k => !process.env[k]);
 if (faltando.length) console.warn('[bot] variáveis ainda não preenchidas:', faltando.join(', '));
 console.log('[bot]', ambienteAsaas());
+// Prova real da chave no boot (a linha acima só olha o prefixo). Chave recusada vira alerta no Telegram.
+if (process.env.NODE_ENV !== 'test') setTimeout(() => testarChaveAsaas().then(r => {
+  if (r.ok) console.log('[bot] Asaas: chave OK (leitura na API aceita)');
+  else { console.error('[bot] Asaas: chave RECUSADA:', r.motivo); import('./lib/iuria.js').then(m => m.avisarOperador(`ALERTA Asaas: a chave gravada no Render foi recusada (${r.motivo}). Cobranças e conferência de pagamento estão paradas até trocar ASAAS_API_KEY.`)).catch(() => {}); }
+}), 5_000);
 // Diagnóstico: só os NOMES das variáveis opcionais ausentes (nunca valores), para conferir o painel do Render pelo log.
 const OPCIONAIS = ['WABA_ID', 'WEBHOOK_VERIFY_TOKEN', 'SUPABASE_URL', 'CLAUDE_MODEL', 'NOME_ROBO', 'NOME_ESCRITORIO', 'ESCRITORIO_ID',
   'ADVOGADO_NOME', 'ADVOGADO_OAB', 'RESPONSAVEL_NOME', 'ESCRITORIO_ENDERECO', 'FORO_CONTRATO', 'TRIBUNAL_PADRAO', 'HONORARIOS_ENTRADA', 'HONORARIOS_EXITO_PCT',

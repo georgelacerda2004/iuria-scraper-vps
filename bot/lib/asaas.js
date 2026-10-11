@@ -12,6 +12,13 @@ const BASE = () => {
   if (chaveSandbox()) return SANDBOX;
   return (process.env.ASAAS_BASE_URL || SANDBOX).replace(/\/+$/, '');
 };
+// Teste real da chave: uma leitura barata na API. Devolve { ok, motivo } sem nunca expor a chave.
+export async function testarChave() {
+  if (!process.env.ASAAS_API_KEY) return { ok: false, motivo: 'sem chave' };
+  try { await api('/customers?limit=1'); return { ok: true }; }
+  catch (e) { return { ok: false, motivo: String(e.message || e).replace(/^\[asaas\]\s*/, '') }; }
+}
+
 export function descreverAmbiente() {
   if (!process.env.ASAAS_API_KEY) return 'Asaas: sem chave (cobranças desligadas)';
   const url = /api\.asaas\.com/.test(process.env.ASAAS_BASE_URL || '');
