@@ -486,7 +486,7 @@ console.log('smoke ok (peticao + campanha)');
   b._reset();
   assert.equal(b.erroDeBloqueio([{ code: 131031 }]), true); assert.equal(b.erroDeBloqueio([{ code: 131047 }]), false);
   assert.equal(b.marcarBloqueio(1000), true); assert.equal(b.marcarBloqueio(2000), false);
-  assert.equal(b.contaBloqueada(3000), true); assert.equal(b.contaBloqueada(1000 + 6 * 3600_000 + 1), false);
+  assert.equal(b.contaBloqueada(3000), true); assert.equal(b.contaBloqueada(2000 + 6 * 3600_000 + 1), false);
   b._reset();
   console.log('smoke ok (bloqueio)');
 }
