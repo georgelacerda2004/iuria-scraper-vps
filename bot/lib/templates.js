@@ -50,23 +50,40 @@ export async function sincronizar({ criar = true } = {}) {
   if (!waba) return status;
   const defs = definicoes();
   let existentes = [];
-  try { existentes = (await graph(`${waba}/message_templates?fields=name,status,language&limit=100`)).data || []; }
+  // `category` é obrigatório aqui: a Meta reclassifica template sozinha e o status continua APPROVED.
+  try { existentes = (await graph(`${waba}/message_templates?fields=name,status,category,language&limit=100`)).data || []; }
   catch (e) { console.warn('[templates] listar:', e.message); return status; }
   for (const [name, d] of Object.entries(defs)) {
     const ex = existentes.find(t => t.name === name && t.language === 'pt_BR');
-    if (ex) { status.set(name, ex.status); continue; }
+    if (ex) { status.set(name, { status: ex.status, category: ex.category }); continue; }
     if (!criar) continue;
     try {
       await graph(`${waba}/message_templates`, { method: 'POST', body: { name, language: 'pt_BR', category: d.category, components: [{ type: 'BODY', text: d.text, example: { body_text: [d.example] } }] } });
-      status.set(name, 'PENDING'); console.log('[templates] criado', name, '(aguardando aprovação da Meta)');
+      status.set(name, { status: 'PENDING', category: d.category }); console.log('[templates] criado', name, '(aguardando aprovação da Meta)');
     } catch (e) { console.warn('[templates] criar', name, e.message); }
   }
   statusEm = Date.now();
-  console.log('[templates] status:', [...status].map(([k, v]) => `${k}=${v}`).join(', ') || 'nenhum');
+  console.log('[templates] status:', [...status].map(([k, v]) => `${k}=${v.status}${v.category && v.category !== 'UTILITY' ? `(${v.category})` : ''}`).join(', ') || 'nenhum');
+  for (const [k, v] of status) {
+    if (v.status === 'APPROVED' && v.category === 'MARKETING') {
+      console.warn(`[templates] ATENÇÃO: ${k} está APROVADO mas na categoria MARKETING — não vou enviar fora da janela de 24 h (risco de spam). Pedir recategorização à Meta.`);
+    }
+  }
   return status;
 }
 
+/**
+ * Um template só serve para mandar fora da janela de 24 h se estiver APROVADO **e** não for MARKETING.
+ *
+ * Por quê: em 08/10/2026 a Meta reclassificou `se_pendencia` de UTILITY para MARKETING sem avisar. O
+ * status continuou APPROVED, então o bot seguiu enviando — e mandar marketing para quem não pediu
+ * marketing é exatamente o que a Meta chama de spam. Dois dias depois a conta foi desabilitada
+ * (131031). Recusar aqui faz o envio degradar para "nada enviado" (ver `enviar()` em whatsapp.js),
+ * nunca para um novo bloqueio.
+ */
+export function podeEnviar(t) { return t?.status === 'APPROVED' && t.category !== 'MARKETING'; }
+
 export async function disponivel(name) {
   if (Date.now() - statusEm > 3600_000) await sincronizar({ criar: false }).catch(() => {});
-  return status.get(name) === 'APPROVED';
+  return podeEnviar(status.get(name));
 }

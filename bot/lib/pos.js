@@ -77,7 +77,7 @@ export async function rodar({ deps = {}, andamentos: lerAndamentos = true } = {}
         const ok = await mandar(c, { texto: textoProtocolo(c, p, chave, portal), template: 'se_processo_protocolado', params: [primeiro(c.nome_perfil) || 'tudo bem', p.numero, portal || linkConsulta(p, chave).split(' (')[0]] }, deps);
         if (ok) { const em = new Date().toISOString(); await atualizarConversa(c.id, { protocolo_avisado_em: em, andamento_avisado_em: em }); protocolos++; }
         const pend = docsPendentes(c);
-        if (ok && pend) await mandar(c, { texto: textoDocsPendentes(c, pend), template: 'se_pendencia', params: [primeiro(c.nome_perfil) || 'tudo bem', pend.slice(0, 200), 'por aqui mesmo'] }, deps);
+        if (ok && pend) await mandar(c, { texto: textoDocsPendentes(c, pend), template: 'se_pendencia', params: [primeiro(c.nome_perfil) || 'tudo bem', pend.slice(0, 200)] }, deps);
         continue; // andamentos a partir do próximo ciclo
       }
       if (!lerAndamentos) continue;
@@ -93,7 +93,12 @@ export async function rodar({ deps = {}, andamentos: lerAndamentos = true } = {}
         if (classe.categoria === 'liminar_deferida') {
           const cliente = await (deps.cliente || buscarCliente)(c.cliente_id);
           const r = await (deps.tratarLiminar || tratarLiminarDeferida)({ conversa: c, cliente, processo: p, andamento: a, deps });
-          if (r?.patch?.cobranca?.url) await mandar(c, { texto: textoEntradaAposLiminar({ nome: c.nome_perfil, cobranca: r.patch.cobranca }), template: 'se_pendencia', params: [primeiro(c.nome_perfil) || 'tudo bem', 'entrada após a liminar', r.patch.cobranca.url] }, deps);
+          // O link de cobrança NÃO entra nos parâmetros do template: `se_pendencia` tem apenas {{1}} e
+          // {{2}} (o terceiro parâmetro era ignorado/recusado pela Meta), e link de pagamento dentro de
+          // template é o que a Meta lê como marketing — foi a reclassificação de `se_pendencia` em
+          // 08/10/2026 que derrubou a conta. O link segue no `texto`, que é o que sai com a janela de
+          // 24 h aberta; fora dela o lead recebe a pendência e responde para receber o link.
+          if (r?.patch?.cobranca?.url) await mandar(c, { texto: textoEntradaAposLiminar({ nome: c.nome_perfil, cobranca: r.patch.cobranca }), template: 'se_pendencia', params: [primeiro(c.nome_perfil) || 'tudo bem', 'entrada após a liminar'] }, deps);
           c.triagem = { ...(c.triagem || {}), ...(r?.patch || {}) };
         }
       }

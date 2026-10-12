@@ -78,7 +78,11 @@ export async function rodar({ agora = Date.now(), deps = {} } = {}) {
     try {
       const texto = passo.via === 'texto' ? await montarTexto(c, deps) : null;
       const r = await (deps.enviar || enviar)({ to: c.wa_id, texto, ultimaEntradaEm: c.ultima_entrada_em, template: c.etapa === 'consentimento' || c.etapa === 'triagem' || c.etapa === 'proposta' ? 'se_retomada' : 'se_pendencia', params: c.etapa === 'consentimento' || c.etapa === 'triagem' || c.etapa === 'proposta' ? [primeiro(c.nome_perfil) || 'tudo bem'] : [primeiro(c.nome_perfil) || 'tudo bem', pendenciaCurta(c)], templateDisponivel: deps.templateDisponivel || disponivel });
-      if (!r) { await atualizarConversa(c.id, { followup_n: AGENDA.length }); continue; } // sem template aprovado: para de tentar
+      // Sem template aprovado — inclusive quando a Meta reclassificou para MARKETING e o
+      // `disponivel()` recusou — NÃO encerra a sequência do lead: só não avança o passo e tenta de
+      // novo no próximo ciclo. Encerrar aqui (followup_n = AGENDA.length) faria o lead perder
+      // justamente os lembretes que devolvemos ao desfazer o estrago do bloqueio.
+      if (!r) continue;
       await gravarMensagem({ conversaId: c.id, waId: c.wa_id, direcao: 'out', tipo: r.via === 'template' ? 'template' : 'text', texto: r.texto, waMessageId: r.out?.messages?.[0]?.id });
       await atualizarConversa(c.id, { followup_n: c.followup_n + 1, followup_em: new Date(agora).toISOString() });
       enviados++;

@@ -516,8 +516,15 @@ console.log('smoke ok (peticao + campanha)');
   let ctx = null, fase = null;
   const f = await proximoPasso({ etapa: 'cliente', processo_id: 'p1', nome_perfil: 'Ana' }, { texto: 'como está meu processo?' }, { resumoProcesso: async () => 'Número do processo: 123', ia: async (a) => { ctx = a.contexto; fase = a.fase; return { texto: 'Está assim...' }; } });
   assert.equal(fase, 'pos'); assert.match(ctx, /123/); assert.equal(f.respostas[0], 'Está assim...');
-  const { definicoes } = await import('../lib/templates.js');
+  const { definicoes, podeEnviar } = await import('../lib/templates.js');
   assert.deepEqual(Object.keys(definicoes()), ['se_retomada', 'se_processo_protocolado', 'se_andamento', 'se_pendencia']);
+  // A Meta reclassifica template sozinha (08/10/2026: se_pendencia virou MARKETING) e o status segue
+  // APPROVED — enviar assim fora da janela é o que derruba a conta por spam. Só UTILITY vale.
+  assert.equal(podeEnviar({ status: 'APPROVED', category: 'UTILITY' }), true);
+  assert.equal(podeEnviar({ status: 'APPROVED', category: 'MARKETING' }), false);
+  assert.equal(podeEnviar({ status: 'PENDING', category: 'UTILITY' }), false);
+  assert.equal(podeEnviar({ status: 'REJECTED', category: 'UTILITY' }), false);
+  assert.equal(podeEnviar(undefined), false);
   console.log('smoke ok (pos)');
 }
 
