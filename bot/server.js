@@ -15,6 +15,7 @@ import { aplicarCorrecoes } from './lib/correcoes.js';
 import { prepararPacotes } from './lib/protocolo.js';
 import { montarBriefing } from './lib/briefing.js';
 import { rodar as rodarFollowups, horaComercial } from './lib/followup.js';
+import { erroDeBloqueio, marcarBloqueio } from './lib/bloqueio.js';
 import { responder } from './lib/cerebro.js';
 import { rodar as rodarPos } from './lib/pos.js';
 import { sincronizar as sincronizarTemplates } from './lib/templates.js';
@@ -71,13 +72,26 @@ function jaVisto(id) {
   return false;
 }
 
+// Retomada que a Meta recusou por bloqueio não conta como enviada: devolve o passo para o lead receber depois.
+async function devolverRetomada(waId) {
+  const s = db();
+  if (!s || !waId) return;
+  const { data: c } = await s.from('se_conversas').select('id,followup_n,followup_em').eq('wa_id', waId).maybeSingle();
+  if (!c?.followup_n || !c.followup_em || Date.now() - new Date(c.followup_em).getTime() > 3600_000) return;
+  await s.from('se_conversas').update({ followup_n: c.followup_n - 1 }).eq('id', c.id);
+}
+
 app.post('/webhook', (req, res) => {
   if (!assinaturaValida(req.rawBody, req.get('x-hub-signature-256'))) { console.warn('[webhook] assinatura inválida'); return res.sendStatus(401); }
   res.sendStatus(200); // responde antes de processar: a Meta exige resposta rápida
   const eventos = extrairEventos(req.body);
   console.log(`[webhook] ${eventos.filter(e => e.kind === 'message').length} mensagem(ns), ${eventos.filter(e => e.kind === 'status').length} status`);
   // Entregas que falham dizem o motivo (número restrito, janela fechada, método de pagamento): fica no log para diagnóstico.
-  for (const st of eventos.filter(e => e.kind === 'status' && (e.status === 'failed' || e.erros?.length))) console.warn(`[webhook] entrega ${st.status} para ${st.waId}: ${st.erros.map(e => `${e.code} ${e.title}${e.detail ? ' (' + e.detail + ')' : ''}`).join('; ') || 'sem detalhe'}`);
+  for (const st of eventos.filter(e => e.kind === 'status' && (e.status === 'failed' || e.erros?.length))) {
+    console.warn(`[webhook] entrega ${st.status} para ${st.waId}: ${st.erros.map(e => `${e.code} ${e.title}${e.detail ? ' (' + e.detail + ')' : ''}`).join('; ') || 'sem detalhe'}`);
+    if (erroDeBloqueio(st.erros)) devolverRetomada(st.waId).catch(() => {});
+    if (erroDeBloqueio(st.erros) && marcarBloqueio()) import('./lib/iuria.js').then(m => m.avisarOperador('ALERTA WhatsApp: a Meta bloqueou a conta comercial (erro 131031 "Business Account locked"). A Paula não recebe nem entrega mensagens. Lembretes automáticos suspensos até o bloqueio sair. Resolver no Business Suite > Qualidade da conta.')).catch(() => {});
+  }
   for (const ev of eventos) {
     if (ev.kind !== 'message' || jaVisto(ev.messageId)) continue;
     tratarMensagem(ev).catch(err => console.error('[bot] erro ao tratar mensagem:', err.message));

@@ -480,6 +480,17 @@ console.log('smoke ok (peticao + campanha)');
   console.log('smoke ok (cobrança sandbox refeita)');
 }
 
+// --- bloqueio da conta do WhatsApp (131031) ---
+{
+  const b = await import('../lib/bloqueio.js');
+  b._reset();
+  assert.equal(b.erroDeBloqueio([{ code: 131031 }]), true); assert.equal(b.erroDeBloqueio([{ code: 131047 }]), false);
+  assert.equal(b.marcarBloqueio(1000), true); assert.equal(b.marcarBloqueio(2000), false);
+  assert.equal(b.contaBloqueada(3000), true); assert.equal(b.contaBloqueada(1000 + 6 * 3600_000 + 1), false);
+  b._reset();
+  console.log('smoke ok (bloqueio)');
+}
+
 // --- pós: protocolo e andamento; fluxo cliente usa a IA com contexto ---
 {
   const pos = await import('../lib/pos.js');

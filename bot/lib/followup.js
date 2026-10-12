@@ -58,9 +58,12 @@ export async function montarTexto(c, deps = {}) {
 }
 
 // Um ciclo: devolve quantos follow-ups saíram.
+import { contaBloqueada } from './bloqueio.js';
+
 export async function rodar({ agora = Date.now(), deps = {} } = {}) {
   const s = db();
   if (!s || !horaComercial(new Date(agora))) return 0;
+  if (contaBloqueada(agora)) return 0; // conta do WhatsApp bloqueada pela Meta: não queima a sequência de lembretes
   const { data } = await s.from('se_conversas').select('*').in('etapa', ETAPAS).lt('followup_n', AGENDA.length).not('ultima_entrada_em', 'is', null).order('ultima_entrada_em', { ascending: true }).limit(40);
   let enviados = 0;
   for (const c of data || []) {
