@@ -102,6 +102,18 @@ export async function criarProcesso({ cliente, escritorioId, triagem }) {
   return data.id;
 }
 
+// Processo de superendividamento que o robô já criou para esta pessoa (o de distribuição viva primeiro).
+// Incidente 15-17/10/2026: a conclusão criava um processo novo a cada 3 min porque a mensagem de
+// "concluído" falhava antes de gravar a etapa. Antes de criar outro, reaproveita o que existe.
+export async function processoDoRobo(clienteId) {
+  const s = db();
+  if (!s || !clienteId) return null;
+  const { data: d } = await s.from('distribuicoes').select('processo_id').eq('cliente_id', clienteId).not('status', 'in', '(arquivada,erro)').order('created_at').limit(1);
+  if (d?.[0]?.processo_id) return d[0].processo_id;
+  const { data: p } = await s.from('processos').select('id').eq('cliente_id', clienteId).eq('natureza', 'Superendividamento').eq('ativo', true).is('numero', null).order('created_at').limit(1);
+  return p?.[0]?.id || null;
+}
+
 export async function criarEntrevista({ cliente, processoId, escritorioId, triagem, historicoTexto }) {
   const s = db();
   const dono = await donoDoEscritorio(escritorioId);

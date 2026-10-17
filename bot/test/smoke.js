@@ -217,6 +217,16 @@ assert.match(v.respostas[0], /tudo confirmado/i);
 let hon = null;
 const vDif = await verificarConclusao({ ...conv, pago_em: null, triagem: { ...conv.triagem, pagamento: 'apos_liminar' } }, { ...vDeps, consultarPagamento: async () => { throw new Error('não deveria consultar'); }, statusAss: async (ids) => ids.map(id => ({ autentique_id: id, status: 'assinado' })), honorario: async (h) => { hon = h; }, avisar: async () => {}, preparar: async () => ({}) });
 assert.equal(vDif.patch.etapa, 'cliente'); assert.equal(hon.diferido, true); assert.match(vDif.respostas[0], /documentos assinados/);
+// incidente 15-17/10: já tem processo (na conversa ou no IURIA) → não cria outro, não gera petição
+{
+  let criou = 0, preparou = 0;
+  const tudo = { ...vDeps, consultarPagamento: async () => ({ pago: true }), statusAss: async (ids) => ids.map(id => ({ autentique_id: id, status: 'assinado' })), criarProcesso: async () => { criou++; return 'novo'; }, honorario: async () => { criou++; }, preparar: async () => { preparou++; return {}; }, avisar: async () => {} };
+  const a = await verificarConclusao({ ...conv, processo_id: 'p-antigo' }, tudo);
+  assert.equal(a.patch.etapa, 'cliente'); assert.equal(a.patch.processo_id, undefined); assert.equal(a.respostas.length, 0);
+  const b2 = await verificarConclusao({ ...conv, processo_id: null }, { ...tudo, processoExistente: async () => 'p-iuria' });
+  assert.equal(b2.patch.processo_id, 'p-iuria'); assert.match(b2.respostas[0], /tudo confirmado/i);
+  await new Promise(r => setTimeout(r, 20)); assert.equal(criou, 0); assert.equal(preparou, 0);
+}
 
 // --- docs: pergunta no meio da coleta → IA responde e repete o pedido pendente ---
 {

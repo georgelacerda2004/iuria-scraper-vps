@@ -245,7 +245,14 @@ export async function verificarConclusao(conversa, deps = {}) {
   if (!((pago || diferido) && tudoAssinado)) return Object.keys(patch).length ? { respostas: [], patch } : null;
 
   const cli = cliente || (deps.buscarCliente || iuria.buscarCliente)(conversa.cliente_id).then(c => c || { id: conversa.cliente_id, nome: conversa.nome_perfil });
+  // Já virou cliente num ciclo anterior: nunca cria outro processo (nem honorário, entrevista ou petição).
+  if (conversa.processo_id) return { respostas: [], patch: { ...patch, etapa: 'cliente' } };
   const c = await cli;
+  const existente = await (deps.processoExistente || iuria.processoDoRobo)(c.id);
+  if (existente) {
+    console.warn('[captacao] processo já existia, reaproveitado (nada novo criado):', conversa.wa_id, existente);
+    return { respostas: [MSG.concluido(conversa.nome_perfil, diferido)], patch: { ...patch, etapa: 'cliente', processo_id: existente } };
+  }
   const processoId = await criarProcesso({ cliente: c, escritorioId: process.env.ESCRITORIO_ID, triagem });
   await honorario({ clienteId: c.id, processoId, valorEntrada: ENTRADA(), diferido, modo: modoEntrada(triagem), criadoPor: c.criado_por || null });
   const entrevistaId = await criarEntrevista({ cliente: c, processoId, escritorioId: process.env.ESCRITORIO_ID, triagem, historicoTexto: deps.historicoTexto || '' }).catch(e => { console.warn('[captacao] entrevista:', e.message); return null; });

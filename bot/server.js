@@ -121,16 +121,27 @@ app.post('/webhooks/asaas', async (req, res) => {
 async function checarConversa(conversa) {
   const r = await verificarConclusao(conversa);
   if (!r) return;
-  for (const texto of r.respostas) {
-    const out = await sendText(conversa.wa_id, texto);
-    await gravarMensagem({ conversaId: conversa.id, waId: conversa.wa_id, direcao: 'out', tipo: 'text', texto, waMessageId: out?.messages?.[0]?.id });
-  }
+  // Grava ANTES de mandar a mensagem. Incidente 15-17/10/2026: com o WhatsApp fora do ar o envio falhava,
+  // a etapa nunca era gravada e a conclusão rodava de novo a cada 3 min (1.655 processos para 2 clientes).
   if (Object.keys(r.patch).length) await atualizarConversa(conversa.id, r.patch);
+  for (const texto of r.respostas) {
+    try {
+      const out = await sendText(conversa.wa_id, texto);
+      await gravarMensagem({ conversaId: conversa.id, waId: conversa.wa_id, direcao: 'out', tipo: 'text', texto, waMessageId: out?.messages?.[0]?.id });
+    } catch (e) { console.warn('[pendencias] mensagem não enviada (estado já gravado):', conversa.wa_id, e.message); }
+  }
 }
 
 // A cada 3 min: conversas aguardando pagamento/assinatura (o webhook do Autentique
 // atualiza a tabela assinaturas; aqui só lemos o status).
+let pendenciasRodando = false;
 async function verificarPendencias() {
+  // Uma rodada por vez: se a anterior ainda não terminou, pula (evita conclusão dupla da mesma conversa).
+  if (pendenciasRodando) return;
+  pendenciasRodando = true;
+  try { await verificarPendenciasUmaVez(); } finally { pendenciasRodando = false; }
+}
+async function verificarPendenciasUmaVez() {
   const s = db();
   if (!s) return;
   const { data } = await s.from('se_conversas').select('*').eq('etapa', 'pagamento_assinatura').limit(50);
