@@ -180,13 +180,48 @@ async function enviarMensagensOperador() {
 
 // Clientes com processo criado mas sem distribuição em rascunho (a geração da petição falhou, ex.: timeout da IA):
 // tenta de novo até 3 vezes, criando a entrevista se faltar. Nunca protocola.
+//
+// 17/10/2026 — INCIDENTE DE CUSTO (chave da IA, US$ 463 em 31 h): a trava era POR PROCESSO
+// (`distribuicoes` daquele processo_id). Como cada tentativa cria processo NOVO, a checagem
+// nunca achava nada, o contador por conversa não segurava (havia várias conversas do mesmo
+// cliente) e o robô gerou 1.261 iniciais para 2 clientes, 40 por hora, a US$ 0,37 cada.
+// Agora a trava é por CLIENTE numa janela de 24 h + teto global por ciclo + teto diário de
+// segurança. Estourou o teto: para e avisa o operador, NUNCA segue gerando.
+const PETICOES_POR_CICLO = Math.max(1, Number(process.env.PETICOES_POR_CICLO || 3));
+const PETICOES_POR_CLIENTE_24H = Math.max(1, Number(process.env.PETICOES_POR_CLIENTE_24H || 2));
+const PETICOES_TETO_24H = Math.max(1, Number(process.env.PETICOES_TETO_24H || 25));
+
 async function retentarPeticoes() {
   const s = db();
   if (!s) return;
+  const desde = new Date(Date.now() - 24 * 3600_000).toISOString();
+  // Teto global: se o dia já passou do limite, para tudo e avisa (uma vez por ciclo, sem spam).
+  const { count: geradasHoje } = await s.from('distribuicoes').select('id', { count: 'exact', head: true }).gte('created_at', desde);
+  if ((geradasHoje || 0) >= PETICOES_TETO_24H) {
+    console.error(`[peticao] TETO de ${PETICOES_TETO_24H} petições em 24 h atingido (${geradasHoje}). Nada foi gerado.`);
+    return;
+  }
   const { data: convs } = await s.from('se_conversas').select('*').eq('etapa', 'cliente').not('processo_id', 'is', null).limit(30);
+  let geradas = 0;
+  const jaTratadoNesteCiclo = new Set();
   for (const c of convs || []) {
+    if (geradas >= PETICOES_POR_CICLO) break;
     const tent = Number(c.triagem?.peticao_tentativas || 0);
     if (tent >= 3) continue;
+    // Um cliente por ciclo: várias conversas da mesma pessoa não podem virar várias petições.
+    if (c.cliente_id && jaTratadoNesteCiclo.has(c.cliente_id)) continue;
+    if (c.cliente_id) jaTratadoNesteCiclo.add(c.cliente_id);
+    // Trava por CLIENTE em 24 h — cobre rascunho de qualquer processo dele (o processo é novo a cada tentativa).
+    if (c.cliente_id) {
+      const { data: dists } = await s.from('distribuicoes').select('id,status,created_at').eq('cliente_id', c.cliente_id).gte('created_at', desde).limit(10);
+      const ativas = (dists || []).filter(d => !['arquivada', 'erro'].includes(d.status));
+      if (ativas.length >= PETICOES_POR_CLIENTE_24H) {
+        // Já existe rascunho recente desta pessoa: encerra as tentativas e não gasta IA de novo.
+        console.log(`[peticao] trava por cliente: ${c.wa_id} já tem ${ativas.length} distribuição(ões) em 24 h`);
+        await atualizarConversa(c.id, { triagem: { ...(c.triagem || {}), peticao_tentativas: 3, peticao_erro: null } }).catch(() => {});
+        continue;
+      }
+    }
     const { count } = await s.from('distribuicoes').select('id', { count: 'exact', head: true }).eq('processo_id', c.processo_id);
     if (count) continue;
     const triagem = c.triagem || {};
@@ -200,6 +235,7 @@ async function retentarPeticoes() {
         await atualizarConversa(c.id, { triagem: { ...triagem, peticao_tentativas: tent + 1, peticao_erro: null } });
         await avisarOperador(`PETIÇÃO PRONTA PARA REVISÃO — ${cliente.nome}\nDistribuição em rascunho (${r.distribuicaoId || 'sem id'}) no IURIA. Falta: exportar o PDF da petição, completar CNPJ dos credores e assinar com o A3.${r.viabilidade?.fundamento_resumo ? '\nViabilidade (IA): ' + r.viabilidade.fundamento_resumo : ''}`);
         console.log('[peticao] distribuição montada com peça já gerada:', c.wa_id);
+        geradas += 1;
         continue;
       }
       // A primeira tentativa usa o histórico inteiro; as seguintes encurtam o contexto e usam o modelo rápido,
@@ -207,10 +243,11 @@ async function retentarPeticoes() {
       const historico = await carregarHistorico(c.id, tent === 0 ? 120 : 30);
       const historicoTexto = historico.map(m => `${m.direcao === 'in' ? 'Cliente' : 'Paula'}: ${m.texto}`).join('\n').slice(0, tent === 0 ? 6000 : 2500);
       const entrevistaId = await criarEntrevista({ cliente, processoId: c.processo_id, escritorioId: process.env.ESCRITORIO_ID, triagem, historicoTexto });
-      const r = await prepararProtocolo({ conversa: c, cliente, processoId: c.processo_id, entrevistaId, escritorioId: process.env.ESCRITORIO_ID, historicoTexto, modelo: tent === 0 ? undefined : (process.env.PETICAO_MODELO_RAPIDO || 'sonnet') });
+      const r = await prepararProtocolo({ conversa: c, cliente, processoId: c.processo_id, entrevistaId, escritorioId: process.env.ESCRITORIO_ID, historicoTexto, modelo: tent === 0 ? undefined : (process.env.PETICAO_MODELO_RAPIDO || 'haiku') });
       await atualizarConversa(c.id, { triagem: { ...triagem, peticao_tentativas: tent + 1 } });
       await avisarOperador(`PETIÇÃO PRONTA PARA REVISÃO — ${cliente.nome}\nDistribuição em rascunho (${r.distribuicaoId || 'sem id'}) no IURIA. Falta: exportar o PDF da petição, completar CNPJ dos credores e assinar com o A3.${r.viabilidade?.fundamento_resumo ? '\nViabilidade (IA): ' + r.viabilidade.fundamento_resumo : ''}`);
       console.log('[peticao] gerada na nova tentativa:', c.wa_id);
+      geradas += 1;
     } catch (e) {
       console.error('[peticao] tentativa', tent + 1, c.wa_id, e.message);
       await atualizarConversa(c.id, { triagem: { ...triagem, peticao_tentativas: tent + 1, peticao_erro: e.message } }).catch(() => {});

@@ -56,7 +56,10 @@ export async function gerarPeticao({ cliente, triagem, entrevistaId, anexos = []
     credores_qualificados: (credores || []).map(c => ({ nome_informado: c.nome, razao_social: c.razao_social, cnpj: c.cnpj, endereco: c.endereco, pendente: !!c.pendente, fonte: c.fonte })),
     hipossuficiencia_assinada: (triagem?.assinaturas || []).some(a => /hipossufici/i.test(a.nome || a.nomeDoc || '')),
     anexos: anexos.slice(0, 5),
-    modelo_ia: modelo || process.env.PETICAO_MODELO || 'opus',
+    // 17/10/2026: default era 'opus' (US$ 0,37 por petição). Sonnet 4.6 gera a inicial completa
+    // por ~1/3 disso e é o modelo que já rodava antes (junho/2026, US$ 1,36 no primeiro registro).
+    // As retentativas caem para haiku (PETICAO_MODELO_RAPIDO). 'opus' só sobrescrevendo a env.
+    modelo_ia: modelo || process.env.PETICAO_MODELO || 'sonnet',
   };
   const r = await fetch(`${SB_URL()}/functions/v1/gerar-inicial`, {
     method: 'POST', headers: { Authorization: `Bearer ${SB_SVC()}`, apikey: SB_SVC(), 'Content-Type': 'application/json' },
